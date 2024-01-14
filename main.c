@@ -11,53 +11,50 @@
 
     #define OK 0
     #define FAIL 1    
-    
-    char console[1000] = "";
-    
-    void PRINT( char *format, ... ){
-        // TODO: lock of the global str
 
-        static int width = 80, height = 12;
-        static int lines = 1, firstline_len = 0, lastline_len = 0;
-        static int cursor = 0;
 
-        char str[1000] = "";
+    #define CONSOLE_WIDTH 80
+    #define CONSOLE_HEIGHT 12
+    
+    char console [ (CONSOLE_WIDTH+1)*CONSOLE_HEIGHT + 1] = "";
+    int _console_lock_ = 0;
+    
+    void PRINT ( char *format, ... ) {
+    
+        static int cursor = 0, lines = 1;
+        static int firstline_len = 0, lastline_len = 0;
         
+        char str[1000] = "";
         va_list( args );
         va_start( args, format );
         vsprintf( str, format, args );
         va_end( args );
-        
-        if( strlen( str ) == 0 )
+        if( str[0] == 0 )
             return;
+        
+        while( _console_lock_ == 1 );
+        _console_lock_ = 1;
 
-        for( int i=0; ; ){
-            console[cursor++] = str[i++];
-            lastline_len ++;
+        for( int i=0; i < strlen( str ); i++ ){
+        
+            console[cursor] = str[i];
             
-            if( str[i] == '\n' ){
-                lines ++;
-                if( lines == 2 )
-                    firstline_len = lastline_len;
-                lastline_len = 0; }
-            
-            if( lines > height ){
+            if( ++lastline_len == CONSOLE_WIDTH )
+                console[ ++cursor ] = '\n';
+
+            if( lines == CONSOLE_HEIGHT ){
                 strcpy( console, console+firstline_len+1 );
                 lines--;
                 cursor -= firstline_len+1;
-                for( firstline_len = 0; console[firstline_len] != '\n'; firstline_len ++ ); }
-
-            if( lastline_len == width ){
-                console[cursor++] = '\n';
+                for( firstline_len = 0; console[firstline_len] != '\n'; firstline_len++ ); }
+            
+            if( console[cursor++] == '\n' ){
                 lines ++;
-                if( lines == 2 )
-                    firstline_len = lastline_len;
-                lastline_len = 0; }
-
-            if( i == strlen( str ) )
-                break; }
+                lastline_len = 0; } }
         
+        _console_lock_ = 0;        
         console[cursor] = 0; }
+
 
     char * status_string( PaStreamCallbackFlags flags ){
         static char str[99]; str[0] = 0;
