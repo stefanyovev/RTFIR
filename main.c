@@ -135,15 +135,6 @@
         FindClose(h);
         PRINT( "loaded %d filters \n", i-1 );
     }
-
-    struct filter * get_filter( char *name ){
-        for( int i=0; filters[i]; i++ ){
-            if( strcmp( filters[i]->name, name ) == 0 )
-                return filters[i];
-        }
-        PRINT( "TATOAL FAIKL \n" );
-        return filters[0];
-    }
     
     void worker( struct out *o ){
         while( 1 ){
@@ -525,7 +516,11 @@
 
                 PRINT( "mapped out %d to filter %s \n", out+1, txt );
                 
-                struct filter *fl= get_filter( txt );
+                struct filter *fl = filters[0];
+                for( int i=0; filters[i]; i++ )
+                    if( strcmp( filters[i]->name, txt ) == 0 )
+                        fl = filters[i];
+
                 map[out].k = fl->k;
                 map[out].kn = fl->kn;
             }
