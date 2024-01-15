@@ -12,50 +12,8 @@
     #define OK 0
     #define FAIL 1    
 
-
-    #define CONSOLE_WIDTH 80
-    #define CONSOLE_HEIGHT 12
+    void PRINT( char *format, ... );
     
-    char console [ (CONSOLE_WIDTH+1)*CONSOLE_HEIGHT + 1] = "";
-    int _console_lock_ = 0;
-    
-    void PRINT ( char *format, ... ) {
-    
-        static int cursor = 0, lines = 1;
-        static int firstline_len = 0, lastline_len = 0;
-        
-        char str[1000] = "";
-        va_list( args );
-        va_start( args, format );
-        vsprintf( str, format, args );
-        va_end( args );
-        if( str[0] == 0 )
-            return;
-        
-        while( _console_lock_ == 1 );
-        _console_lock_ = 1;
-
-        for( int i=0; i < strlen( str ); i++ ){
-        
-            console[cursor] = str[i];
-            
-            if( ++lastline_len == CONSOLE_WIDTH )
-                console[ ++cursor ] = '\n';
-
-            if( lines == CONSOLE_HEIGHT ){
-                strcpy( console, console+firstline_len+1 );
-                lines--;
-                cursor -= firstline_len+1;
-                for( firstline_len = 0; console[firstline_len] != '\n'; firstline_len++ ); }
-            
-            if( console[cursor++] == '\n' ){
-                lines ++;
-                lastline_len = 0; } }
-        
-        _console_lock_ = 0;        
-        console[cursor] = 0; }
-
-
     char * status_string( PaStreamCallbackFlags flags ){
         static char str[99]; str[0] = 0;
         if( flags & paInputUnderflow ) strcat( str, " & Input Underflow" );
@@ -476,9 +434,7 @@
     const int WW = 574, HH = 200;
 
     HWND hwnd;
-    HDC hdc, hdcMem;
-    HBITMAP hbmp;
-    void ** pixels;
+    HDC hdc;
     
     RECT rc;
     MSG msg;
@@ -492,96 +448,29 @@
     #define LB1 (110)
     #define CB1 (220)
     #define CB2 (330)
+    
+    #define EDT (400)
 
     HWND hCombo1, hCombo2, hBtn;
     HWND cbs[10];
     HWND cbs2[10];
+    HWND hEdit;
 
-    //int VPw = SAMPLERATE; // ViewPort width = 1 second in samples
-    //int VPh = 3000;       // ViewPort height = 2000 samples
-    //int VPx = 0;         // ViewPort pos x = now - width (rightmost points)
-    //int VPy = -500;     // ViewPort pos y = -VPh/2 so the absis comes vertically centered
+    void PRINT( char *format, ... ){
     
-    //int Vw = 400;         // View width
-    //int Vh = 100;         // View height
-    //int Vx = 150;        // View pos x
-    //int Vy = 15;        // View pos y
+        char str[1000] = "";
+        va_list( args );
+        va_start( args, format );
+        vsprintf( str, format, args );
+        va_end( args );
+        if( str[0] == 0 )
+            return;
 
-    //long now;
-    
-    //void transform_point( POINT *p ){
-    //    double Qw = ((double)Vw)/((double)VPw);
-    //    double Qh = ((double)Vh)/((double)VPh);        
-    //    p->x = (long)round( (p->x - VPx) * Qw + Vx );
-    //    p->y = (long)round( (p->y - VPy) * Qh + Vy );
-    //    p->y = 2*Vy + Vh - p->y;
-    //}
-    
-    //void draw_graph( HDC ddc, struct graph *g ){
-    //    static POINT points[POINTSMAX];
-    //    if( g->min_i > -1 ){            
-    //        int pi = 0;
-    //        int gi = ( g->full ? g->cursor : 0 );
-    //        int count = ( g->full ? POINTSMAX : g->cursor );
-    //        for( int i=0; i<count; i++ ){
-    //            points[pi++] = g->points[gi++];
-    //            transform_point( points+pi-1 );
-    //            gi %= POINTSMAX;
-    //        }        
-    //        Polyline( ddc, points, count );
-    //    }
-    //    POINT min_left = { now - SAMPLERATE, g->points[g->min_i].y };
-    //    POINT min_right = { now, g->points[g->min_i].y };
-    //    transform_point( &min_left );
-    //    transform_point( &min_right );
-    //    MoveToEx( ddc, min_left.x, min_right.y, 0 );
-    //    LineTo( ddc, min_right.x, min_right.y );
-    //    POINT max_left = { now - SAMPLERATE, g->points[g->max_i].y };
-    //    POINT max_right = { now, g->points[g->max_i].y };
-    //    transform_point( &max_left );
-    //    transform_point( &max_right );
-    //    MoveToEx( ddc, max_left.x, max_right.y, 0 );
-    //    LineTo( ddc, max_right.x, max_right.y );
-    //}
-    
-    void draw(){
-        memset( pixels, 128, WW*HH*4 );        
-        GetClientRect( hwnd, &rc );        
-        DrawText( hdcMem, (const char*) &console, -1, &rc, DT_LEFT );
-
-        //Rectangle( hdcMem, Vx, Vy, Vx+Vw, Vy+Vh );
-
-        // stamp
-        //now = NOW + (SAMPLERATE/100); // show 10ms of the future
-        //VPx = now - VPw; // set viewport position
-        
-        // absis
-        //POINT absis_p1 = {now - SAMPLERATE, 0};
-        //POINT absis_p2 = {now, 0};
-        //transform_point( &absis_p1 );
-        //transform_point( &absis_p2 );
-        //MoveToEx( hdcMem, absis_p1.x, absis_p1.y, 0 );
-        //LineTo( hdcMem, absis_p2.x, absis_p2.y );
-        
-        // test impulse
-        //POINT p1 = {0, 0};
-        //POINT p2 = {0, 500};
-        //POINT p3 = {500, 0};
-        //transform_point( &p1 );
-        //transform_point( &p2 );
-        //transform_point( &p3 );
-        //MoveToEx( hdcMem, p1.x, p1.y, 0 );
-        //LineTo( hdcMem, p2.x, p2.y );
-        //LineTo( hdcMem, p3.x, p3.y );
-        
-        // graphs
-        //draw_graph( hdcMem, &(INPORT.graph) );
-        //draw_graph( hdcMem, &(OUTPORT.graph) );
-        
-        // commit
-        BitBlt( hdc, 10, 460, WW, HH, hdcMem, 0, 0, SRCCOPY );
+        int index = GetWindowTextLength( hEdit );
+        // SetFocus (hEdit); // set focus
+        SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // set selection - end of text
+        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); // append!
     }
-
 
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
@@ -707,25 +596,12 @@
             return 0; }
 
         hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
-
-        BITMAPINFO bmi;
-        memset( &bmi, 0, sizeof(bmi) );
-        bmi.bmiHeader.biSize = sizeof(bmi);
-        bmi.bmiHeader.biWidth = WW;
-        bmi.bmiHeader.biHeight =  -HH;         // Order pixels from top to bottom
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;             // last byte not used, 32 bit for alignment
-        bmi.bmiHeader.biCompression = BI_RGB;
-
         hdc = GetDC( hwnd );
-        hbmp = CreateDIBSection( hdc, &bmi, DIB_RGB_COLORS, &pixels, 0, 0 );
-        hdcMem = CreateCompatibleDC( hdc );
-        SelectObject( hdcMem, hbmp );
-        SetBkMode( hdcMem, TRANSPARENT );
 
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 10, 490, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 40, 490, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 10, 77, 53, hwnd, BTN1, NULL, NULL);
+        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
 
         // add map labels and dropdowns
         for( int i=0; i<10; i++ ){
@@ -781,8 +657,6 @@
                 if( cursor > 0 )
                     PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*100.0) );
             }
-            else 
-                draw();
         }
         
         return 0; }
