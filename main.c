@@ -566,7 +566,8 @@
         if( Pa_GetDeviceCount() <= 0 )
             PRINT( "ERROR: No Devices Found. \n" );
             
-        // PRINT( "%s\n\n", Pa_GetVersionInfo()->versionText );            
+        // PRINT( "%s\n\n", Pa_GetVersionInfo()->versionText );
+        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
         PRINT( "SAMPLERATE %d \n", SAMPLERATE );
         
         PaUtil_InitializeClock();
