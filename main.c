@@ -647,7 +647,7 @@
                 correct_cursor_if_necessary();
                 last_correction_time = PaUtil_GetTime();
                 if( cursor > 0 )
-                    PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*100.0) );
+                    PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*400.0) ); // 25% = 100% beacuse it seems to glitch at 27% (no time for deviations)
             }
         }
         
