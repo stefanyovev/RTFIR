@@ -459,6 +459,12 @@
         SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); // append!
     }
 
+    void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+        correct_cursor_if_necessary();
+        if( cursor > 0 )
+            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*400.0) ); // 25% = 100% beacuse it seems to glitch at 27% (no time for deviations)
+    }
+
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
             if( LOWORD(wParam) == BTN1 ){
@@ -491,6 +497,7 @@
                             EnableWindow( cbs2[i], 1 );
                         }
                     }
+                    SetTimer( 0, 0, 1000, (TIMERPROC) &every_second );
                 }
             } else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){
             
@@ -634,21 +641,8 @@
             SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
 
         // loop
-        double last_correction_time = PaUtil_GetTime(); // queryperformancecounter de-facto
-        // TODO: use NOW; get once in the loop; give it to draw
-        while( !done ){
-            if( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) ){
-                if( msg.message == WM_QUIT )
-                    done = TRUE;
-                else {
-                    TranslateMessage( &msg );
-                    DispatchMessage( &msg ); }}
-            else if( PaUtil_GetTime() - last_correction_time > 1.0 ){ // once per second
-                correct_cursor_if_necessary();
-                last_correction_time = PaUtil_GetTime();
-                if( cursor > 0 )
-                    PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*400.0) ); // 25% = 100% beacuse it seems to glitch at 27% (no time for deviations)
-            }
-        }
-        
-        return 0; }
+        while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
+            TranslateMessage( &msg );
+            DispatchMessage( &msg ); }
+
+	return msg.wParam; }
