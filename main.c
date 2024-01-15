@@ -9,9 +9,6 @@
     #include <windows.h>
     #include <portaudio.h>
 
-    #define OK 0
-    #define FAIL 1    
-
     void PRINT( char *format, ... );
     
     char * status_string( PaStreamCallbackFlags flags ){
@@ -378,18 +375,18 @@
                 i ? 0 : &params,
                 SAMPLERATE,
                 paFramesPerBufferUnspecified,
-                paClipOff | paDitherOff | paPrimeOutputBuffersUsingStreamCallback, // paNeverDropInput ?
+                paClipOff | paDitherOff | paPrimeOutputBuffersUsingStreamCallback, // paNeverDropInput is for full-duplex only
                 &device_tick,
                 0 );
 
             if( err != paNoError ){
                 if( err != paUnanticipatedHostError ) {
                     PRINT( "ERROR 1: %s \n", Pa_GetErrorText( err ) );
-                    return FAIL; }
+                    return 0; }
                 else {
                     const PaHostErrorInfo* herr = Pa_GetLastHostErrorInfo();
                     PRINT( "ERROR 2: %s \n", herr->errorText );
-                    return FAIL; }}
+                    return 0; }}
             
             if( i ){
                 INPORT.channels_count = device_info->maxInputChannels;
@@ -415,7 +412,7 @@
             err = Pa_StartStream( *stream );
             if( err != paNoError ){
                 PRINT( "ERROR 3: %s \n", Pa_GetErrorText( err ) );
-                return FAIL; }
+                return 0; }
 
             PaStreamInfo *stream_info = Pa_GetStreamInfo( *stream );            
             PRINT( "%d / %d \n",
@@ -425,7 +422,7 @@
 
         // done
         PRINT( "both started. \n" );
-        return OK; }
+        return 1; }
 
 
 
@@ -488,7 +485,7 @@
                 GetDlgItemText( hwnd, CMB2, txt, 255 );
                 sscanf( txt, "  %3d", &dd );
 
-                if( start( sd, dd ) == OK ){
+                if( start( sd, dd ) ){
                     for( int i=0; i<OUTPORT.channels_count; i++ )
                         map[i].src_chan = i % 2; // LR LR LR ..
                     EnableWindow( hCombo1, 0 );
