@@ -11,15 +11,6 @@
 
     void PRINT( char *format, ... );
     
-    char * status_string( PaStreamCallbackFlags flags ){
-        static char str[99]; str[0] = 0;
-        if( flags & paInputUnderflow ) strcat( str, " & Input Underflow" );
-        if( flags & paInputOverflow ) strcat( str, " & Input Overflow" );
-        if( flags & paOutputUnderflow ) strcat( str, " & Output Underflow" );
-        if( flags & paOutputOverflow ) strcat( str, " & Output Overflow" );
-        if( flags & paPrimingOutput ) strcat( str, " & Priming Output" );
-        return str +3; }
-    
     // ############################################################################################################ //
 
     void PaUtil_InitializeClock( void );
@@ -281,8 +272,12 @@
         
         long now;
 
-        if( statusFlags )
-            PRINT( "status: %s \n", status_string( statusFlags ) );
+        if( statusFlags ){
+            if( paInputUnderflow & statusFlags ) PRINT( "Input Underflow \n" );
+            if( paInputOverflow & statusFlags ) PRINT( "Input Overflow \n" );
+            if( paOutputUnderflow & statusFlags ) PRINT( "Output Underflow \n" );
+            if( paOutputOverflow & statusFlags ) PRINT( "Output Overflow \n" );
+            if( paPrimingOutput & statusFlags ) PRINT( "Priming Output \n" );}
         
         if( input && output )
             PRINT( "strange \n" );
