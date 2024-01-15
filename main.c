@@ -548,7 +548,29 @@
     int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){                                    // MAIN2
 
         // SetProcessDPIAware();
+        // UI
+        WNDCLASSEX wc;
+        memset( &wc, 0, sizeof(wc) );
+        wc.cbSize = sizeof(wc);
+        wc.hInstance = hInstance;
+        wc.lpfnWndProc = WndProc;
+        wc.lpszClassName = "mainwindow";
+        wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
+        wc.hCursor = LoadCursor( 0, IDC_ARROW );
 
+        if( !RegisterClassEx(&wc) ){
+            MessageBox( 0, "Failed to register window class.", "Error", MB_OK );
+            return 0; }
+
+        hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
+        hdc = GetDC( hwnd );
+
+        hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 10, 490, 8000, hwnd, CMB1, NULL, NULL);
+        hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 40, 490, 8000, hwnd, CMB2, NULL, NULL);
+        hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 10, 77, 53, hwnd, BTN1, NULL, NULL);
+        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
+
+        // init core
         if( Pa_Initialize() )
             PRINT( "ERROR: Could not initialize PortAudio. \n" );
         if( Pa_GetDeviceCount() <= 0 )
@@ -580,28 +602,6 @@
 
         // load filters
         load_filters();
-
-        // UI
-        WNDCLASSEX wc;
-        memset( &wc, 0, sizeof(wc) );
-        wc.cbSize = sizeof(wc);
-        wc.hInstance = hInstance;
-        wc.lpfnWndProc = WndProc;
-        wc.lpszClassName = "mainwindow";
-        wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
-        wc.hCursor = LoadCursor( 0, IDC_ARROW );
-
-        if( !RegisterClassEx(&wc) ){
-            MessageBox( 0, "Failed to register window class.", "Error", MB_OK );
-            return 0; }
-
-        hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
-        hdc = GetDC( hwnd );
-
-        hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 10, 490, 8000, hwnd, CMB1, NULL, NULL);
-        hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 40, 490, 8000, hwnd, CMB2, NULL, NULL);
-        hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 10, 77, 53, hwnd, BTN1, NULL, NULL);
-        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
 
         // add map labels and dropdowns
         for( int i=0; i<10; i++ ){
