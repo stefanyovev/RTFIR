@@ -378,6 +378,7 @@
                 INPORT.channels_count = device_info->maxInputChannels;
                 PRINT( "%d channels \n", INPORT.channels_count );
                 canvas = malloc( INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
+                memset( canvas, 0, INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
                 if( !canvas )
                     PRINT( "ERROR: could not allocate memory" );
             } else {
