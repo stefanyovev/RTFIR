@@ -122,6 +122,9 @@
             while( fscanf( f, "%f", &num ) == 1 )
                 count ++;
                 
+            if( count == 0 )
+                continue;
+
             fseek( f, 0, SEEK_SET );
             
             float *data = malloc( SAMPLESIZE * count  );
