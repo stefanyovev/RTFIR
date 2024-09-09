@@ -135,7 +135,15 @@
         FindClose(h);
         PRINT( "loaded %d filters \n", i-1 );
     }
-    
+
+    int convolve_sse_simple (
+        float* in,
+        float* out,
+        int length,
+        float* kernel,
+        int kernel_length
+        );
+
     void worker( struct out *o ){
         while( 1 ){
             while( !(o->outp) )
@@ -143,9 +151,19 @@
                     return;
             int ofs = cursor % MSIZE;
             float *sig = canvas + o->src_chan*MSIZE*4 +MSIZE +ofs;
-            for( int n=0; n < o->frameCount; n++ )
-                for( int kn=0; kn < o->kn; kn++ )
-                    o->outp[n] += o->k[kn]*sig[n-kn];
+            
+            //for( int n=0; n < o->frameCount; n++ )
+            //    for( int kn=0; kn < o->kn; kn++ )
+            //        o->outp[n] += o->k[kn]*sig[n-kn];
+
+            convolve_sse_simple (
+                sig - o->kn+1,
+                o->outp,
+                o->frameCount + o->kn-1,
+                o->k,
+                o->kn
+            );
+            
             o->outp = 0;
         }
     }
