@@ -136,7 +136,7 @@
         PRINT( "loaded %d filters \n", i-1 );
     }
 
-    int convolve_sse_simple (
+    int convolve_sse_partial_unroll (
         float* in,
         float* out,
         int length,
@@ -156,7 +156,7 @@
             //    for( int kn=0; kn < o->kn; kn++ )
             //        o->outp[n] += o->k[kn]*sig[n-kn];
 
-            convolve_sse_simple (
+            convolve_sse_partial_unroll (
                 sig - o->kn+1,
                 o->outp,
                 o->frameCount + o->kn-1,
