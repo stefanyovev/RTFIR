@@ -15,6 +15,17 @@
 
     void PaUtil_InitializeClock( void );
     double PaUtil_GetTime( void );
+
+    int convolve_sse_partial_unroll (
+        float* in,
+        float* out,
+        int length,
+        float* kernel,
+        int kernel_length
+        );
+    
+    // ############################################################################################################ //
+    
     double T0;
     
     #define SAMPLERATE 48000 // [samples/second]
@@ -63,13 +74,9 @@
         int src_chan;
         float *k;
         int kn;
-        float *outp;
-        int frameCount;
     }
     
     *map;
-
-    int shutdown;
 
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
@@ -136,37 +143,70 @@
         PRINT( "loaded %d filters \n", i-1 );
     }
 
-    int convolve_sse_partial_unroll (
-        float* in,
-        float* out,
-        int length,
-        float* kernel,
-        int kernel_length
-        );
+    // ########################## THREADS ################################################
 
-    void worker( struct out *o ){
+    #define THREADSMAX 100
+
+    int threads_count;
+    int threads_shutdown;    
+
+    struct thread {
+        int status; // 0 done; 1 work; 2 emerging
+        void (* f)( float*, float*, int, float*, int );
+        float *in;
+        float *out;
+        int len;
+        float *k;
+        int klen;
+    }
+    
+    threads[THREADSMAX];
+
+    void threads_body( struct thread *self ){
         while( 1 ){
-            while( !(o->outp) )
-                if( shutdown )
+            while( self->status != 1 )
+                if( threads_shutdown )
                     return;
-            int ofs = cursor % MSIZE;
-            float *sig = canvas + o->src_chan*MSIZE*4 +MSIZE +ofs;
-            
-            //for( int n=0; n < o->frameCount; n++ )
-            //    for( int kn=0; kn < o->kn; kn++ )
-            //        o->outp[n] += o->k[kn]*sig[n-kn];
-
-            convolve_sse_partial_unroll (
-                sig - o->kn+1,
-                o->outp,
-                o->frameCount + o->kn-1,
-                o->k,
-                o->kn
-            );
-            
-            o->outp = 0;
+            self->f(
+                self->in -self->klen+1, // * matlab
+                self->out,
+                self->len +self->klen-1, // * format
+                self->k,
+                self->klen
+                );
+            self->status = 0;
         }
     }
+
+    void threads_start( int count ){
+        memset( &threads, 0, sizeof( struct thread ) * count );
+        threads_count = count;
+        threads_shutdown = 0;
+        for( int i; i<count; i++ )
+            CreateThread( 0, 0, &threads_body, threads+i, 0, 0 ); }
+
+    void threads_stop(){
+        threads_shutdown = 1; }
+
+    int threads_done(){
+        for( int i=0; i<threads_count; i++ )
+            if( threads[i].status != 0 )
+                return 0;
+        return 1; }
+
+    void threads_submit( void *f, float *in, float *out, int len, float *k, int klen ){
+        while( 1 )
+            for( int i=0; i<threads_count; i++ )
+                if( threads[i].status == 0 ){
+                    threads[i].status = 2;
+                    threads[i].f = f;
+                    threads[i].in = in;
+                    threads[i].out = out;
+                    threads[i].len = len;
+                    threads[i].k = k;
+                    threads[i].klen = klen;
+                    threads[i].status = 1;
+                    return; } }
     
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
@@ -320,22 +360,17 @@
                     memset( output[i], 0, frameCount*SAMPLESIZE );
                     if( map[i].src_chan == -1 )
                         continue;
-                    map[i].frameCount = frameCount;
-                    map[i].outp = output[i];
+                    threads_submit(
+                        &convolve_sse_partial_unroll,
+                        canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE,
+                        output[i],
+                        frameCount,
+                        map[i].k,
+                        map[i].kn
+                        );
                 }
 
-                int done = 0;
-                while( !done ){
-                    done = 1;
-                    for( int i=0; i<OUTPORT.channels_count; i++ ){
-                        if( map[i].src_chan == -1 )
-                            continue;
-                        if( map[i].outp ){
-                            done = 0;
-                            break;
-                        }
-                    }
-                }
+                while( !threads_done() );
 
                 if( cursor + frameCount > INPORT.len )
                     PRINT( "glitch %d \n", cursor -INPORT.len );
@@ -409,10 +444,11 @@
                     map[i].src_chan = -1;
                     map[i].k = filters[0]->k;
                     map[i].kn = filters[0]->kn;
-                    map[i].outp = 0;
-                    CreateThread( 0, 0, &worker, map+i, 0, 0 );
                 }
             }
+            
+            // threads_start( OUTPORT.channels_count ); // GetLogicalProcessorInformation();
+            threads_start( 5 ); // physical cores minus 2 is good.
 
             err = Pa_StartStream( *stream );
             if( err != paNoError ){
@@ -555,7 +591,7 @@
         else if( msg == WM_CLOSE )
             DestroyWindow( hwnd );
         else if( msg == WM_DESTROY ){
-            shutdown = 1;
+            threads_stop();
             PostQuitMessage( 0 );
         }
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
@@ -615,7 +651,6 @@
         cursor = -1; // invalid
         diffs_full = 0;
         diffs_i = 0;
-        shutdown = 0;
 
         // load filters
         load_filters();
