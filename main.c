@@ -144,11 +144,41 @@
     }
 
     // ########################## THREADS ################################################
+    // ########################## THREADS ################################################
+    // ########################## THREADS ################################################
 
     #define THREADSMAX 100
 
-    int threads_count;
-    int threads_shutdown;    
+    int threads_cores = 0;
+    int threads_count = 0;
+    int threads_shutdown = 0;
+
+    void get_cpu_cores(){        
+        typedef BOOL (WINAPI *LPFN_GLPI)( PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);        
+        LPFN_GLPI glpi = GetProcAddress( GetModuleHandle("kernel32"), "GetLogicalProcessorInformation");        
+        if( !glpi ) { threads_cores = 1; return; }
+        PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
+        DWORD returnLength = 0;        
+        glpi( buffer, &returnLength );
+        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) malloc( returnLength );
+        BOOL r = glpi( buffer, &returnLength );
+        if( !r ) { threads_cores = 1; return; }
+        ptr = buffer;
+        DWORD byteOffset = 0;
+        DWORD processorCoreCount = 0;
+        while( byteOffset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= returnLength ){
+            if( ptr->Relationship == RelationProcessorCore ) processorCoreCount++;
+            byteOffset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+            ptr ++; }
+        threads_cores = processorCoreCount; }
+
+    void choose_threads_count(){
+        threads_count = (int)(ceil(((float)threads_cores)*0.625)); } // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
+
+    void threads_init(){
+        get_cpu_cores();
+        choose_threads_count();
+        threads_shutdown = 0; }
 
     struct thread {
         int status; // 0 done; 1 work; 2 emerging
@@ -174,15 +204,12 @@
                 self->k,
                 self->klen
                 );
-            self->status = 0;
-        }
-    }
+            self->status = 0; } }
 
-    void threads_start( int count ){
-        memset( &threads, 0, sizeof( struct thread ) * count );
-        threads_count = count;
-        threads_shutdown = 0;
-        for( int i; i<count; i++ )
+    void threads_start(){
+        if( !threads_count ) threads_init();
+        memset( &threads, 0, sizeof( struct thread ) * threads_count );
+        for( int i; i<threads_count; i++ )
             CreateThread( 0, 0, &threads_body, threads+i, 0, 0 ); }
 
     void threads_stop(){
@@ -447,8 +474,7 @@
                 }
             }
             
-            // threads_start( OUTPORT.channels_count ); // GetLogicalProcessorInformation();
-            threads_start( 5 ); // physical cores minus 2 is good.
+            threads_start();
 
             err = Pa_StartStream( *stream );
             if( err != paNoError ){
@@ -627,13 +653,13 @@
             PRINT( "ERROR: Could not initialize PortAudio. \n" );
         if( Pa_GetDeviceCount() <= 0 )
             PRINT( "ERROR: No Devices Found. \n" );
-            
-        // PRINT( "%s\n\n", Pa_GetVersionInfo()->versionText );
-        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
-        PRINT( "SAMPLERATE %d \n", SAMPLERATE );
-        
         PaUtil_InitializeClock();
         T0 = PaUtil_GetTime();
+        threads_init();
+
+        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
+        PRINT( "SAMPLERATE %d \n", SAMPLERATE );
+        PRINT( "Cores/Threads %d/%d\n", threads_cores, threads_count );
 
         // globals
         struct port* ports [2] = { &INPORT, &OUTPORT };
