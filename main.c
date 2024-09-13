@@ -78,6 +78,8 @@
     
     *map;
 
+    int jobs_per_channel = 1; // to how many jobs a single channel is split
+
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
@@ -172,8 +174,11 @@
             ptr ++; }
         threads_cores = processorCoreCount; }
 
-    void choose_threads_count(){
-        threads_count = (int)(ceil(((float)threads_cores)*0.625)); } // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
+    void choose_threads_count(){ // the balance between processing power and stable operation
+        // threads_count = 2; // man i work on this pc
+        threads_count = (int)(ceil(((float)threads_cores)*0.625)); // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
+        // threads_count = threads_cores; // i bougth this pc for this app only
+        }
 
     void threads_init(){
         get_cpu_cores();
@@ -387,14 +392,17 @@
                     memset( output[i], 0, frameCount*SAMPLESIZE );
                     if( map[i].src_chan == -1 )
                         continue;
-                    threads_submit(
-                        &convolve_sse_partial_unroll,
-                        canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE,
-                        output[i],
-                        frameCount,
-                        map[i].k,
-                        map[i].kn
-                        );
+                    int jlen = frameCount / jobs_per_channel;
+                    int rem = frameCount % jobs_per_channel;                        
+                    for( int j = 0; j<jobs_per_channel; j++ )
+                        threads_submit(
+                            &convolve_sse_partial_unroll,
+                            canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE +j*jlen,
+                            output[i] +j*jlen,
+                            (j == jobs_per_channel-1) ? jlen+rem : jlen,
+                            map[i].k,
+                            map[i].kn
+                            );
                 }
 
                 while( !threads_done() );
@@ -472,10 +480,11 @@
                     map[i].k = filters[0]->k;
                     map[i].kn = filters[0]->kn;
                 }
+                threads_start();
+                jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
+                PRINT( "JOBSPERCHANNEL %d \n", jobs_per_channel );
             }
             
-            threads_start();
-
             err = Pa_StartStream( *stream );
             if( err != paNoError ){
                 PRINT( "ERROR 3: %s \n", Pa_GetErrorText( err ) );
