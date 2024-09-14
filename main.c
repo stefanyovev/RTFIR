@@ -10,20 +10,50 @@
     #include <portaudio.h>
 
     void PRINT( char *format, ... );
-    
-    // ############################################################################################################ //
 
     void PaUtil_InitializeClock( void );
     double PaUtil_GetTime( void );
-
-    int convolve_2 (
-        float* in,
-        float* out,
-        int length,
-        float* kernel,
-        int kernel_length
-        );
     
+    // ############################################################################################################ //
+
+    int convolve_0 ( float* in, float* out, int length, float* kernel, int kernel_length ); // basic
+    int convolve_1 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
+    int convolve_2 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
+        
+    int convolve_3_16 ( float* in, float* out, int length, float* kernel, int kernel_length ); // avx
+    int convolve_3_32 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_64 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_128 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_256 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_512 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_1024 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_2048 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_4096 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_8192 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_16384 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_3_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
+
+    void * f3[13] = {
+        &convolve_3_16,
+        &convolve_3_32,
+        &convolve_3_64,
+        &convolve_3_128,
+        &convolve_3_256,
+        &convolve_3_512,
+        &convolve_3_1024,
+        &convolve_3_2048,
+        &convolve_3_4096,
+        &convolve_3_8192,
+        &convolve_3_16384,
+        &convolve_3_32768,
+        &convolve_3_65536 };
+    
+    int closest_larger_size( len ){ // or equal    
+        int mask = 65536;
+        while( mask/2 >= len ) mask /= 2;
+        return mask < 16 ? 16 : mask; }
+
     // ############################################################################################################ //
     
     double T0;
@@ -74,6 +104,8 @@
         int src_chan;
         float *k;
         int kn;
+        int knr;
+        int (* f)( float*, float*, int, float*, int );
     }
     
     *map;
@@ -88,6 +120,7 @@
         char *name;
         float* k;
         int kn;
+        int knr;
     }
     
     *filters[11]; // null terminated list of pointers
@@ -97,7 +130,9 @@
         memset( filters, 0, sizeof(struct filter *) );
         filters[0] = malloc( sizeof( struct filter ) );
         filters[0]->name = "None";
-        filters[0]->k = malloc( SAMPLESIZE * 1  );
+        filters[0]->knr = closest_larger_size(1);
+        filters[0]->k = malloc( SAMPLESIZE * (filters[0]->knr) );
+        memset( filters[0]->k, 0, SAMPLESIZE * (filters[0]->knr) );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;
         WIN32_FIND_DATA r;
@@ -124,7 +159,9 @@
 
             fseek( f, 0, SEEK_SET );
             
-            float *data = malloc( SAMPLESIZE * count  );
+            int real_len = closest_larger_size(count);
+            float *data = malloc( SAMPLESIZE * real_len );
+            memset( data, 0, SAMPLESIZE * real_len );
             int j=0 ;
             while( fscanf( f, "%f", data + (j++) ) == 1 );
             
@@ -138,6 +175,7 @@
             strcpy( filters[i]->name, r.cFileName );
             filters[i]->k = data;
             filters[i]->kn = count;
+            filters[i]->knr = real_len;
             
             i++;
         } while( FindNextFile( h, &r ) );
@@ -396,12 +434,12 @@
                     int rem = frameCount % jobs_per_channel;                        
                     for( int j = 0; j<jobs_per_channel; j++ )
                         threads_submit(
-                            &convolve_2,
+                            map[i].f,
                             canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE +j*jlen,
                             output[i] +j*jlen,
                             (j == jobs_per_channel-1) ? jlen+rem : jlen,
                             map[i].k,
-                            map[i].kn
+                            map[i].knr
                             );
                 }
 
@@ -479,6 +517,8 @@
                     map[i].src_chan = -1;
                     map[i].k = filters[0]->k;
                     map[i].kn = filters[0]->kn;
+                    map[i].knr = filters[0]->knr; int index = 0, v = 16; while( v != map[i].knr ){ v *= 2; index ++; }
+                    map[i].f = f3[index];
                 }
                 threads_start();
                 jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
@@ -620,6 +660,8 @@
 
                 map[out].k = fl->k;
                 map[out].kn = fl->kn;
+                map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
+                map[out].f = f3[index];
             }
          }
 
