@@ -16,7 +16,7 @@
     void PaUtil_InitializeClock( void );
     double PaUtil_GetTime( void );
 
-    int convolve_sse_partial_unroll (
+    int convolve_2 (
         float* in,
         float* out,
         int length,
@@ -396,7 +396,7 @@
                     int rem = frameCount % jobs_per_channel;                        
                     for( int j = 0; j<jobs_per_channel; j++ )
                         threads_submit(
-                            &convolve_sse_partial_unroll,
+                            &convolve_2,
                             canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE +j*jlen,
                             output[i] +j*jlen,
                             (j == jobs_per_channel-1) ? jlen+rem : jlen,
