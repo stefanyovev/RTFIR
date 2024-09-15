@@ -1,10 +1,12 @@
 todos:
- - make avx and sse turn-off-able
+ - make avx and sse turn-off-able, threads count configurable even with cmdline flag
+ - timestamp for logs
+ - log to file not ui
  - create an output buffer. dont write directly to output for two reasons:
     - avx f()s write outside of it
     - input callback can do half of the processing then output cb the other half - jobsperchannel to be always even
  - dont consider first 10 callbacks. if priming dont aftermath; static inport_countdown, outport_countdown
  - consider last 3 sec for min/max
  - waitforsingleobject, timerobject to min time 100ns (5-6 samples) to sleep thread for min os cpu witth more (double) threads count
- - interpolate or mix/fade. dry/wet ?. last_sent_value ?
- - state save/load
+ - click/pops on correction
+ - state save/load; delay; reload filters
