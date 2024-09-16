@@ -18,36 +18,35 @@
 
     int convolve_0 ( float* in, float* out, int length, float* kernel, int kernel_length ); // basic
     int convolve_1 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
-    int convolve_2 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
         
-    int convolve_3_16 ( float* in, float* out, int length, float* kernel, int kernel_length ); // avx
-    int convolve_3_32 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_64 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_128 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_256 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_512 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_1024 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_2048 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_4096 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_8192 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_16384 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_3_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_16 ( float* in, float* out, int length, float* kernel, int kernel_length ); // avx
+    int convolve_2_32 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_64 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_128 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_256 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_512 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_1024 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_2048 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_4096 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_8192 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_16384 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
 
     void * f3[13] = {
-        &convolve_3_16,
-        &convolve_3_32,
-        &convolve_3_64,
-        &convolve_3_128,
-        &convolve_3_256,
-        &convolve_3_512,
-        &convolve_3_1024,
-        &convolve_3_2048,
-        &convolve_3_4096,
-        &convolve_3_8192,
-        &convolve_3_16384,
-        &convolve_3_32768,
-        &convolve_3_65536 };
+        &convolve_2_16,
+        &convolve_2_32,
+        &convolve_2_64,
+        &convolve_2_128,
+        &convolve_2_256,
+        &convolve_2_512,
+        &convolve_2_1024,
+        &convolve_2_2048,
+        &convolve_2_4096,
+        &convolve_2_8192,
+        &convolve_2_16384,
+        &convolve_2_32768,
+        &convolve_2_65536 };
     
     int closest_larger_size( len ){ // or equal    
         int mask = 65536;

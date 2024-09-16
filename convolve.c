@@ -32,28 +32,6 @@
 
 
     int convolve_1 (float* in, float* out, int length, float* kernel, int kernel_length){
-        // original name: convolve_sse_simple
-        __m128 kernel_reverse[kernel_length] __attribute__ ((aligned (16)));    
-        __m128 data_block __attribute__ ((aligned (16)));
-        __m128 prod __attribute__ ((aligned (16)));
-        __m128 acc __attribute__ ((aligned (16)));
-        for(int i=0; i<kernel_length; i++){
-            kernel_reverse[i] = _mm_set1_ps(kernel[kernel_length - i - 1]); }
-        for(int i=0; i<length-kernel_length; i+=4){
-            acc = _mm_setzero_ps();
-            for(int k=0; k<kernel_length; k++){
-                data_block = _mm_loadu_ps(in + i + k);
-                prod = _mm_mul_ps(kernel_reverse[k], data_block);
-                acc = _mm_add_ps(acc, prod); }
-            _mm_storeu_ps(out+i, acc); }
-        int i = length - kernel_length;
-        out[i] = 0.0;
-        for(int k=0; k<kernel_length; k++){
-            out[i] += in[i+k] * kernel[kernel_length - k - 1]; }
-        return 0; }
-
-
-    int convolve_2 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_sse_partial_unroll
         __m128 kernel_reverse[kernel_length] __attribute__ ((aligned (16)));    
         __m128 data_block __attribute__ ((aligned (16)));
@@ -77,7 +55,7 @@
         return 0; }
 
 
-    int convolve_3_16 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_16 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -112,7 +90,7 @@
     
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 32
-    int convolve_3_32 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_32 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -142,7 +120,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 64
-    int convolve_3_64 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_64 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -172,7 +150,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 128
-    int convolve_3_128 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_128 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -202,7 +180,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 256
-    int convolve_3_256 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_256 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -232,7 +210,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 512
-    int convolve_3_512 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_512 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -262,7 +240,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 1024
-    int convolve_3_1024 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_1024 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -292,7 +270,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 2048
-    int convolve_3_2048 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_2048 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -322,7 +300,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 4096
-    int convolve_3_4096 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_4096 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -352,7 +330,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 8192
-    int convolve_3_8192 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_8192 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -382,7 +360,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 16384
-    int convolve_3_16384 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_16384 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -412,7 +390,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 32768
-    int convolve_3_32768 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_32768 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -442,7 +420,7 @@
 
     #undef KERNEL_LENGTH
     #define KERNEL_LENGTH 65536
-    int convolve_3_65536 (float* in, float* out, int length, float* kernel, int kernel_length){
+    int convolve_2_65536 (float* in, float* out, int length, float* kernel, int kernel_length){
         // original name: convolve_avx_unrolled_vector_unaligned_fma
         __m256 kernel_reverse[KERNEL_LENGTH] __attribute__ ((aligned (ALIGNMENT)));
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
