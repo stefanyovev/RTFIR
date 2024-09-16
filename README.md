@@ -1,12 +1,14 @@
 todos:
- - make avx and sse turn-off-able, threads count configurable even with cmdline flag
- - timestamp for logs
- - log to file not ui
- - create an output buffer. dont write directly to output for two reasons:
-    - avx f()s write outside of it
-    - input callback can do half of the processing then output cb the other half - jobsperchannel to be always even
+ - detect avx, fallback to sse
+ - as dsp load goes from 0 to 100% used cores should go from 50% to 100%
+     - make threads stoppable 
+ - warn about maximum filter length, dont load it
+ - create an output buffer then input callback to do half of the processing and output cb the other half - jobsperchannel to be always even
+ - waitforsingleobject, timerobject to min time 100ns (5-6 samples) to sleep thread for min os cpu
  - dont consider first 10 callbacks. if priming dont aftermath; static inport_countdown, outport_countdown
- - consider last 3 sec for min/max
- - waitforsingleobject, timerobject to min time 100ns (5-6 samples) to sleep thread for min os cpu witth more (double) threads count
+ - consider last 3 sec for min/max 
  - click/pops on correction
- - state save/load; delay; reload filters
+ - log to file not ui or details window; timestamp on lines; label for load
+ - state save/load
+ - delay
+ - reload filters
