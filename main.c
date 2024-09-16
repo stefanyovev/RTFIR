@@ -214,8 +214,8 @@
 
     void choose_threads_count(){ // the balance between processing power and stable operation
         // threads_count = 2; // man i work on this pc
-        threads_count = (int)(ceil(((float)threads_cores)*0.625)); // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
-        // threads_count = threads_cores; // i bougth this pc for this app only
+        // threads_count = (int)(ceil(((float)threads_cores)*0.625)); // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
+        threads_count = threads_cores; // i bougth this pc for this app only
         }
 
     void threads_init(){
@@ -253,7 +253,7 @@
         if( !threads_count ) threads_init();
         memset( &threads, 0, sizeof( struct thread ) * threads_count );
         for( int i; i<threads_count; i++ )
-            CreateThread( 0, 0, &threads_body, threads+i, 0, 0 ); }
+            CreateThread( 0, 10000000, &threads_body, threads+i, 0, 0 ); }
 
     void threads_stop(){
         threads_shutdown = 1; }
@@ -591,7 +591,7 @@
     void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
         correct_cursor_if_necessary();
         if( cursor > 0 )
-            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*400.0) ); // 25% = 100% beacuse it seems to glitch at 27% (no time for deviations)
+            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); // 50% = 100% beacuse it seems to glitch at 27% (no time for deviations)
     }
 
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
