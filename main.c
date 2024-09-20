@@ -18,7 +18,6 @@
 
     int convolve_0 ( float* in, float* out, int length, float* kernel, int kernel_length ); // basic
     int convolve_1 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
-        
     int convolve_2_16 ( float* in, float* out, int length, float* kernel, int kernel_length ); // avx
     int convolve_2_32 ( float* in, float* out, int length, float* kernel, int kernel_length );
     int convolve_2_64 ( float* in, float* out, int length, float* kernel, int kernel_length );
@@ -64,11 +63,9 @@
      
     #define POINTSMAX 1000  // should be even
     #define POINTSMIN 20
-    
     #define DIFFSMAX 100
     
-    #define MSIZE 250000 // keep one second
-
+    #define MSIZE 250000 // keep 5 seconds
 
     struct graph {
         POINT points[POINTSMAX];
@@ -109,7 +106,7 @@
     
     *map;
 
-    int jobs_per_channel = 1; // to how many jobs a single channel is split
+    int jobs_per_channel = 1;
 
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
@@ -125,7 +122,6 @@
     *filters[11]; // null terminated list of pointers
     
     void load_filters(){
-        // TODO: mallocs without if check null
         memset( filters, 0, sizeof(struct filter *) );
         filters[0] = malloc( sizeof( struct filter ) );
         filters[0]->name = "None";
@@ -211,10 +207,8 @@
             ptr ++; }
         threads_cores = processorCoreCount; }
 
-    void choose_threads_count(){ // the balance between processing power and stable operation
-        // threads_count = 2; // man i work on this pc
-        // threads_count = (int)(ceil(((float)threads_cores)*0.625)); // 1-1 | 4-3 | 8-5 | 16-10 | 32-20
-        threads_count = threads_cores; // i bougth this pc for this app only
+    void choose_threads_count(){
+        threads_count = threads_cores;
         }
 
     void threads_init(){
@@ -302,7 +296,7 @@
                 g->full = 1;
         }
 
-        // find min/max (every time for constant cpu usage and ease)
+        // find min/max
         int pi = 0;
         int gi = ( g->full ? g->cursor : 0 );
         int count = ( g->full ? POINTSMAX : g->cursor );
@@ -380,7 +374,7 @@
         }
     }
 
-    PaStreamCallbackResult device_tick(                            // RECEIVE
+    PaStreamCallbackResult device_tick(
         float **input,
         float **output,
         unsigned long frameCount,
@@ -400,7 +394,7 @@
         if( input && output )
             PRINT( "strange \n" );
 
-        if( input ){ // PRINT("i");
+        if( input ){
         
             // write
             int ofs = INPORT.len % MSIZE;
@@ -421,7 +415,7 @@
             aftermath( 0, now, INPORT.t0 + INPORT.len -now, frameCount );
         }
         
-        if( output ){ // PRINT("o");
+        if( output ){
 
             if( cursor > -1 ){
                 // copy 
@@ -446,6 +440,7 @@
 
                 if( cursor + frameCount > INPORT.len )
                     PRINT( "glitch %d \n", cursor -INPORT.len );
+
                 cursor += frameCount;
             }
 
@@ -582,9 +577,8 @@
             return;
 
         int index = GetWindowTextLength( hEdit );
-        // SetFocus (hEdit); // set focus
-        SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // set selection - end of text
-        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); // append!
+        SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // select from end to end
+        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str );
     }
 
     void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
@@ -673,7 +667,7 @@
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
 
 
-    int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){                                    // MAIN2
+    int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
 
         // SetProcessDPIAware();
         // UI
