@@ -9,6 +9,7 @@ todos:
  - callback times measure; own load measure; score the cpu
  - log to file not ui or details window; timestamp on lines; label for load;
  - malloc with errmsg
+ - 192/262
 
 cpu always high:
  - make threads stoppable
