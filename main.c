@@ -8,6 +8,7 @@
     #include <math.h>
     #include <windows.h>
     #include <portaudio.h>
+    #include "conf.c"
 
     void PRINT( char *format, ... );
 
@@ -119,8 +120,14 @@
         int knr;
     }
     
-    *filters[11]; // null terminated list of pointers
+    *filters[100]; // null terminated list of pointers
     
+    struct filter * filter_p( char * name ){
+        for( int i=0; filters[i]; i++ )
+            if( strcmp( filters[i]->name, name ) == 0 )
+                return filters[i];
+        return 0; }
+
     void load_filters(){
         memset( filters, 0, sizeof(struct filter *) );
         filters[0] = malloc( sizeof( struct filter ) );
@@ -277,7 +284,6 @@
 
 
     void aftermath( int sel, long t, int avail_after, int frameCount ){
-        char *portname = ( sel == 0 ? "input" : "output" );
         struct graph *g = ( sel == 0 ? &(INPORT.graph) : &(OUTPORT.graph) );
         
         // make a stat
@@ -538,18 +544,16 @@
 
     // ############################################################################################################ //
 
+    int conf_used = 0;  // 0- devs not from conf; 1- one dev is from conf; 2- both devs from conf - use the map
 
     const int width = 600;
     const int height = 700;
     const int WW = 574, HH = 200;
 
     HWND hwnd;
-    HDC hdc;
-    
+    HDC hdc;    
     RECT rc;
     MSG msg;
-    BOOL done = FALSE;
-
 
     #define CMB1 (555)
     #define CMB2 (556)
@@ -567,7 +571,6 @@
     HWND hEdit;
 
     void PRINT( char *format, ... ){
-    
         char str[1000] = "";
         va_list( args );
         va_start( args, format );
@@ -575,34 +578,63 @@
         va_end( args );
         if( str[0] == 0 )
             return;
-
         int index = GetWindowTextLength( hEdit );
         SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // select from end to end
-        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str );
-    }
+        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); }
 
     void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
         correct_cursor_if_necessary();
         if( cursor > 0 )
-            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); // 50% = 100% beacuse it seems to glitch at 27% (no time for deviations)
-    }
+            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); } // 50% == 100%
+
+    char * device_name( int device_id ){
+        static char *names = 0;
+        if( !names ){ 
+            names = malloc( Pa_GetDeviceCount() * 250 );
+            memset( names, 0, Pa_GetDeviceCount() * 250 ); }
+        char * name = names + device_id*250;
+        if( !name[0] ){
+            char dev_name[100] = "", drv_name[100] = "";
+            strcpy( dev_name, Pa_GetDeviceInfo( device_id )->name );
+            strcpy( drv_name, Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id )->hostApi )->name );
+            sprintf( name, " %3d  /  %s  /  %s ", device_id, strstr( drv_name, "Windows" ) ? drv_name+8 : drv_name, dev_name ); }
+        return name; }
+
+    int device_id( char * device_name ){
+        int id; sscanf( device_name, "  %3d", &id );
+        return id; }
+
+    void set_filter( int out, struct filter * fl ){
+        map[out].k = fl->k;
+        map[out].kn = fl->kn;
+        map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
+        map[out].f = f3[index]; }
 
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
-            if( LOWORD(wParam) == BTN1 ){
-
+        
+            if( LOWORD(wParam) == CMB1 && CBN_SELCHANGE == HIWORD(wParam) ){
+                char txt[250];
+                GetDlgItemText( hwnd, CMB1, txt, 250 );
+                if( conf_get( "device1" ) && strcmp( txt, conf_get( "device1" ) ) != 0 )
+                    conf_used--;
+                conf_set( "device1", txt );
+                
+            } else if( LOWORD(wParam) == CMB2 && CBN_SELCHANGE == HIWORD(wParam) ){
+                char txt[250];
+                GetDlgItemText( hwnd, CMB2, txt, 250 );
+                if( conf_get( "device2" ) && strcmp( txt, conf_get( "device2" ) ) != 0 )
+                    conf_used--;
+                conf_set( "device2", txt );
+                
+            } else if( LOWORD(wParam) == BTN1 ){
                 int sd, dd;
-                char txt[300];
-
-                GetDlgItemText( hwnd, CMB1, txt, 255 );
-                sscanf( txt, "  %3d", &sd );
-
-                GetDlgItemText( hwnd, CMB2, txt, 255 );
-                sscanf( txt, "  %3d", &dd );
-
-                if( start( sd, dd ) ){
-                    for( int i=0; i<OUTPORT.channels_count; i++ )
-                        map[i].src_chan = i % 2; // LR LR LR ..
+                char txt[250];
+                GetDlgItemText( hwnd, CMB1, txt, 250 );
+                sd = device_id( txt );
+                GetDlgItemText( hwnd, CMB2, txt, 250 );
+                dd = device_id( txt );
+                if( start( sd, dd ) ){                                   // START
                     EnableWindow( hCombo1, 0 );
                     EnableWindow( hCombo2, 0 );
                     EnableWindow( hBtn, 0 );
@@ -610,32 +642,42 @@
                         if( i < 10 ){
                             EnableWindow( cbs[i], 1 );
                             for( int j=0; j<INPORT.channels_count; j++ ){
-                                char str[3] = "nn";
-                                if( j+1 != 10 ) { str[0] = 48+j+1; str[1] = 0; }
-                                else { str[0] = 49; str[1] = 48; str[2] = 0; }
+                                char str[3], key[6]; int val;
+                                sprintf( str, "%d", j+1 );
                                 SendMessage( cbs[i], CB_ADDSTRING, 0, str );
-                            }
+                                sprintf( key, "out%d", i+1 );
+                                if( conf_used == 2 && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+                                    map[i].src_chan = val-1;
+                                else conf_set( key, "None" );
+                                sprintf( key, "filter%d", i+1 );
+                                if( conf_used == 2 && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
+                                    set_filter( i, filter_p( conf_get( key ) ) );
+                                    for( int k=0; filters[k]; k++ )
+                                        if( strcmp( filters[k]->name, conf_get( key ) ) == 0 ){
+                                            SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)k, (LPARAM)0 );
+                                            break; }
+                                }
+                                }
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src_chan+1, (LPARAM)0 );
-                            EnableWindow( cbs2[i], 1 );
-                        }
-                    }
-                    SetTimer( 0, 0, 1000, (TIMERPROC) &every_second );
-                }
+                            EnableWindow( cbs2[i], 1 ); } }
+                    SetTimer( 0, 0, 1000, (TIMERPROC) &every_second ); }
+
             } else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){
-            
-                int out = LOWORD(wParam) - CB1;
-                
+                int out = LOWORD(wParam) - CB1;                
                 char  txt[20];
-                GetDlgItemText( hwnd, CB1+out, txt, 20 );
-                
+                GetDlgItemText( hwnd, CB1+out, txt, 20 );                
                 int chan = txt[0]-48-1;
+                char key[20], val[20];
+                sprintf( key, "out%d", out+1 );
                 if( chan < 10 ) {
                     map[out].src_chan = chan;
-                    PRINT( "mapped out %d to in %d\n", out+1, chan+1 ); }
+                    PRINT( "mapped out %d to in %d\n", out+1, chan+1 );
+                    sprintf( val, "%d", chan+1 ); }
                 else {
                     map[out].src_chan = -1;
-                    PRINT( "muted out %d \n", out+1 ); }
-                
+                    PRINT( "muted out %d \n", out+1 );
+                    sprintf( val, "None" ); }
+                conf_set( key, val );
                 
             } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){
                 
@@ -644,33 +686,32 @@
                 char  txt[100];
                 GetDlgItemText( hwnd, CB2+out, txt, 100 );
 
+                struct filter *fl = filter_p( txt );
+
+                set_filter( out, fl );
+                
                 PRINT( "mapped out %d to filter %s \n", out+1, txt );
                 
-                struct filter *fl = filters[0];
-                for( int i=0; filters[i]; i++ )
-                    if( strcmp( filters[i]->name, txt ) == 0 )
-                        fl = filters[i];
-
-                map[out].k = fl->k;
-                map[out].kn = fl->kn;
-                map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
-                map[out].f = f3[index];
+                char key[9];
+                sprintf( key, "filter%d", out+1 );
+                conf_set( key, txt );
             }
-         }
+        }
 
         else if( msg == WM_CLOSE )
             DestroyWindow( hwnd );
+
         else if( msg == WM_DESTROY ){
             threads_stop();
-            PostQuitMessage( 0 );
-        }
+            conf_save();
+            PostQuitMessage( 0 ); }
+
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
 
 
     int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
-
+        
         // SetProcessDPIAware();
-        // UI
         WNDCLASSEX wc;
         memset( &wc, 0, sizeof(wc) );
         wc.cbSize = sizeof(wc);
@@ -679,28 +720,21 @@
         wc.lpszClassName = "mainwindow";
         wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
         wc.hCursor = LoadCursor( 0, IDC_ARROW );
-
-        if( !RegisterClassEx(&wc) ){
-            MessageBox( 0, "Failed to register window class.", "Error", MB_OK );
-            return 0; }
-
+        if( !RegisterClassEx(&wc) ){ MessageBox( 0, "Failed to register window class.", "Error", MB_OK ); return 1; }
         hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
         hdc = GetDC( hwnd );
-
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 10, 490, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 40, 490, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 10, 77, 53, hwnd, BTN1, NULL, NULL);
         hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
 
         // init core
-        if( Pa_Initialize() )
-            PRINT( "ERROR: Could not initialize PortAudio. \n" );
-        if( Pa_GetDeviceCount() <= 0 )
-            PRINT( "ERROR: No Devices Found. \n" );
+        if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
+        if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );
         PaUtil_InitializeClock();
         T0 = PaUtil_GetTime();
+        conf_load( "RTFIR.conf" );
         threads_init();
-
         PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
         PRINT( "SAMPLERATE %d \n", SAMPLERATE );
         PRINT( "Cores/Threads %d/%d\n", threads_cores, threads_count );
@@ -717,7 +751,7 @@
             p->graph.full = 0;
             p->graph.min_i = -1; // invalid
             p->graph.max_i = -1; // invalid
-        }
+            }
         cursor = -1; // invalid
         diffs_full = 0;
         diffs_i = 0;
@@ -753,15 +787,21 @@
         ShowWindow( hwnd, SW_SHOW );
 
         // populate device dropdowns
-        char str[1000], txt[100000];
-        for( int i=0; i<Pa_GetDeviceCount(); i++ ){
-            PaDeviceInfo *info = Pa_GetDeviceInfo(i);
-            strcpy( str, Pa_GetHostApiInfo( info->hostApi )->name );
-            sprintf( txt, " %3d  /  %s  /  %s ", i, strstr( str, "Windows" ) ? str+8 : str, info->name );
-            if( info->maxInputChannels ) SendMessage( hCombo1, CB_ADDSTRING, 0, txt );
-            if( info->maxOutputChannels ) SendMessage( hCombo2, CB_ADDSTRING, 0, txt );
+        for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
+            if( Pa_GetDeviceInfo( i )->maxInputChannels ){
+                ci = SendMessage( hCombo1, CB_ADDSTRING, 0, device_name( i ) );
+                if( conf_get( "device1" ) && strcmp( conf_get( "device1" ), device_name( i ) ) == 0 ){
+                    SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 );
+                    conf_used++; }}
+            if( Pa_GetDeviceInfo( i )->maxOutputChannels ){
+                ci = SendMessage( hCombo2, CB_ADDSTRING, 0, device_name( i ) );
+                if( conf_get( "device2" ) && strcmp( conf_get( "device2" ), device_name( i ) ) == 0 ){
+                    SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 );
+                    conf_used++; }} }
+        if( SendMessage( hCombo1, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
+        if( SendMessage( hCombo2, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
+            SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
 
         // loop
         while( GetMessage( &msg, 0, 0, 0 ) > 0 ){

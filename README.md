@@ -2,14 +2,15 @@ todos:
  - detect avx, fallback to sse, with createprocess
  - warn about maximum filter length, dont load it
  - click/pops on correction
- - state save/load
+ - show conf in disabled combos
  - delay
  - reload filters
- - rm directsound & mma
+ - rm directsound & mma; rm devID from ui
  - callback times measure; own load measure; score the cpu
  - log to file not ui or details window; timestamp on lines; label for load;
  - malloc with errmsg
  - 192/262
+ - link to sound control panel
 
 cpu always high:
  - make threads stoppable
