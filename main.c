@@ -11,9 +11,16 @@
     #include "conf.c"
 
     void PRINT( char *format, ... );
+    void MSGBOX( char *format, ... );
+
+    void * getmem( long count ){
+        void *p = malloc( count );
+        if( !p ){ MSGBOX( "Out of memory" ); exit(1); }
+        return p; }
 
     void PaUtil_InitializeClock( void );
     double PaUtil_GetTime( void );
+    
     
     // ############################################################################################################ //
 
@@ -128,12 +135,18 @@
                 return filters[i];
         return 0; }
 
+    int filter_i( char * name ){
+        for( int i=0; filters[i]; i++ )
+            if( strcmp( filters[i]->name, name ) == 0 )
+                return i;
+        return -1; }
+
     void load_filters(){
         memset( filters, 0, sizeof(struct filter *) );
-        filters[0] = malloc( sizeof( struct filter ) );
+        filters[0] = getmem( sizeof( struct filter ) );
         filters[0]->name = "None";
         filters[0]->knr = closest_larger_size(1);
-        filters[0]->k = malloc( SAMPLESIZE * (filters[0]->knr) );
+        filters[0]->k = getmem( SAMPLESIZE * (filters[0]->knr) );
         memset( filters[0]->k, 0, SAMPLESIZE * (filters[0]->knr) );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;
@@ -162,7 +175,7 @@
             fseek( f, 0, SEEK_SET );
             
             int real_len = closest_larger_size(count);
-            float *data = malloc( SAMPLESIZE * real_len );
+            float *data = getmem( SAMPLESIZE * real_len );
             memset( data, 0, SAMPLESIZE * real_len );
             int j=0 ;
             while( fscanf( f, "%f", data + (j++) ) == 1 );
@@ -172,8 +185,8 @@
             fclose(f);
             
             // push to list
-            filters[i] = malloc( sizeof( struct filter ) );
-            filters[i]->name = malloc( strlen( fname )+1 );
+            filters[i] = getmem( sizeof( struct filter ) );
+            filters[i]->name = getmem( strlen( fname )+1 );
             strcpy( filters[i]->name, r.cFileName );
             filters[i]->k = data;
             filters[i]->kn = count;
@@ -202,7 +215,7 @@
         PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
         DWORD returnLength = 0;        
         glpi( buffer, &returnLength );
-        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) malloc( returnLength );
+        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) getmem( returnLength );
         BOOL r = glpi( buffer, &returnLength );
         if( !r ) { threads_cores = 1; return; }
         ptr = buffer;
@@ -503,16 +516,12 @@
             if( i ){
                 INPORT.channels_count = device_info->maxInputChannels;
                 PRINT( "%d channels \n", INPORT.channels_count );
-                canvas = malloc( INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
+                canvas = getmem( INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
                 memset( canvas, 0, INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
-                if( !canvas )
-                    PRINT( "ERROR: could not allocate memory" );
             } else {
                 OUTPORT.channels_count = device_info->maxOutputChannels;
                 PRINT( "%d channels \n", OUTPORT.channels_count );
-                map = malloc( OUTPORT.channels_count * sizeof(struct out) );
-                if( !map )
-                    PRINT( "ERROR: could not allocate memory" );
+                map = getmem( OUTPORT.channels_count * sizeof(struct out) );
                 for( int i=0; i<OUTPORT.channels_count; i++ ){
                     map[i].src_chan = -1;
                     map[i].k = filters[0]->k;
@@ -543,8 +552,8 @@
 
 
     // ############################################################################################################ //
-
-    int conf_used = 0;  // 0- devs not from conf; 1- one dev is from conf; 2- both devs from conf - use the map
+    // ############################################################################################################ //
+    // ############################################################################################################ //
 
     const int width = 600;
     const int height = 700;
@@ -581,6 +590,14 @@
         int index = GetWindowTextLength( hEdit );
         SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // select from end to end
         SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); }
+    
+    void MSGBOX( char *format, ... ){
+        char str[1000] = "";
+        va_list( args );
+        va_start( args, format );
+        vsprintf( str, format, args );
+        va_end( args );
+        MessageBox( 0, str, "Message", MB_OK ); }
 
     void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
         correct_cursor_if_necessary();
@@ -590,7 +607,7 @@
     char * device_name( int device_id ){
         static char *names = 0;
         if( !names ){ 
-            names = malloc( Pa_GetDeviceCount() * 250 );
+            names = getmem( Pa_GetDeviceCount() * 250 );
             memset( names, 0, Pa_GetDeviceCount() * 250 ); }
         char * name = names + device_id*250;
         if( !name[0] ){
@@ -604,11 +621,60 @@
         int id; sscanf( device_name, "  %3d", &id );
         return id; }
 
+    void fill_left_combos( int count ){
+        char n[3];
+        for( int i=0; i<10; i++ ){
+            SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+            SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"None" );
+            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+            for( int j=0; j<count; j++ ){
+                sprintf( n, "%d", j+1 );
+                SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } } }
+
     void set_filter( int out, struct filter * fl ){
         map[out].k = fl->k;
         map[out].kn = fl->kn;
         map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
         map[out].f = f3[index]; }
+
+    int is_conf_used(){ // wether the two devices selected are as in the conf
+        char a[250], b[250];
+        if( !conf_get( "device1" ) || !conf_get( "device2" ) ) return 0;
+        GetDlgItemText( hwnd, CMB1, a, 250);
+        GetDlgItemText( hwnd, CMB2, b, 250);
+        return strcmp( a, conf_get( "device1" ) ) == 0 && strcmp( b, conf_get( "device2" ) ) == 0; }
+
+    void show_conf( int b ){ // sets the bottom combos as in conf or clear them
+        if( !b ){
+            for( int i=0; i<10; i++ ){
+                SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+                SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
+            return; }
+        char key[20]; int val;
+        for( int i=0; i<10; i++ ){
+            sprintf( key, "out%d", i+1 );
+            if( conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+                SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)val, (LPARAM)0 );
+            else SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+            sprintf( key, "filter%d", i+1 );
+            if( conf_get( key ) && filter_p( conf_get( key ) ) )
+                SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 );
+            else SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
+
+    void save_conf(){
+        char txt[250], key[20];
+        GetDlgItemText( hwnd, CMB1, txt, 250 );
+        conf_set( "device1", txt );
+        GetDlgItemText( hwnd, CMB2, txt, 250 );
+        conf_set( "device2", txt );
+        for( int i=0; i<10; i++ ){
+            sprintf( key, "out%d", i+1 );
+            GetDlgItemText( hwnd, CB1+i, txt, 250 );
+            conf_set( key, txt );
+            sprintf( key, "filter%d", i+1 );
+            GetDlgItemText( hwnd, CB2+i, txt, 250 );
+            conf_set( key, txt ); }
+        conf_save(); }
 
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
@@ -616,16 +682,13 @@
             if( LOWORD(wParam) == CMB1 && CBN_SELCHANGE == HIWORD(wParam) ){
                 char txt[250];
                 GetDlgItemText( hwnd, CMB1, txt, 250 );
-                if( conf_get( "device1" ) && strcmp( txt, conf_get( "device1" ) ) != 0 )
-                    conf_used--;
-                conf_set( "device1", txt );
+                fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
+                show_conf( is_conf_used() );
                 
             } else if( LOWORD(wParam) == CMB2 && CBN_SELCHANGE == HIWORD(wParam) ){
                 char txt[250];
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
-                if( conf_get( "device2" ) && strcmp( txt, conf_get( "device2" ) ) != 0 )
-                    conf_used--;
-                conf_set( "device2", txt );
+                show_conf( is_conf_used() );
                 
             } else if( LOWORD(wParam) == BTN1 ){
                 int sd, dd;
@@ -642,22 +705,14 @@
                         if( i < 10 ){
                             EnableWindow( cbs[i], 1 );
                             for( int j=0; j<INPORT.channels_count; j++ ){
-                                char str[3], key[6]; int val;
-                                sprintf( str, "%d", j+1 );
-                                SendMessage( cbs[i], CB_ADDSTRING, 0, str );
+                                char key[6]; int val;
                                 sprintf( key, "out%d", i+1 );
-                                if( conf_used == 2 && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+                                if( is_conf_used() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
                                     map[i].src_chan = val-1;
-                                else conf_set( key, "None" );
                                 sprintf( key, "filter%d", i+1 );
-                                if( conf_used == 2 && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
+                                if( is_conf_used() && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
                                     set_filter( i, filter_p( conf_get( key ) ) );
-                                    for( int k=0; filters[k]; k++ )
-                                        if( strcmp( filters[k]->name, conf_get( key ) ) == 0 ){
-                                            SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)k, (LPARAM)0 );
-                                            break; }
-                                }
-                                }
+                                    SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 ); } }
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src_chan+1, (LPARAM)0 );
                             EnableWindow( cbs2[i], 1 ); } }
                     SetTimer( 0, 0, 1000, (TIMERPROC) &every_second ); }
@@ -667,43 +722,29 @@
                 char  txt[20];
                 GetDlgItemText( hwnd, CB1+out, txt, 20 );                
                 int chan = txt[0]-48-1;
-                char key[20], val[20];
-                sprintf( key, "out%d", out+1 );
                 if( chan < 10 ) {
                     map[out].src_chan = chan;
-                    PRINT( "mapped out %d to in %d\n", out+1, chan+1 );
-                    sprintf( val, "%d", chan+1 ); }
+                    PRINT( "mapped out %d to in %d\n", out+1, chan+1 ); }
                 else {
                     map[out].src_chan = -1;
-                    PRINT( "muted out %d \n", out+1 );
-                    sprintf( val, "None" ); }
-                conf_set( key, val );
+                    PRINT( "muted out %d \n", out+1 ); }
                 
-            } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){
-                
-                int out = LOWORD(wParam) - CB2;
-                
+            } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){                
+                int out = LOWORD(wParam) - CB2;                
                 char  txt[100];
                 GetDlgItemText( hwnd, CB2+out, txt, 100 );
-
                 struct filter *fl = filter_p( txt );
-
-                set_filter( out, fl );
-                
-                PRINT( "mapped out %d to filter %s \n", out+1, txt );
-                
-                char key[9];
-                sprintf( key, "filter%d", out+1 );
-                conf_set( key, txt );
+                set_filter( out, fl );                
+                PRINT( "mapped out %d to filter %s \n", out+1, txt );                
             }
         }
 
-        else if( msg == WM_CLOSE )
-            DestroyWindow( hwnd );
+        else if( msg == WM_CLOSE ){
+            if( cursor > 0 ) save_conf();
+            DestroyWindow( hwnd ); }
 
         else if( msg == WM_DESTROY ){
             threads_stop();
-            conf_save();
             PostQuitMessage( 0 ); }
 
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
@@ -760,29 +801,20 @@
         load_filters();
 
         // add map labels and dropdowns
-        for( int i=0; i<10; i++ ){
-        
-            char str[7] = "out nn";
-            if( i+1 != 10 ) { str[4] = 48+i+1; str[5] = 0; }
-            else { str[4] = 49; str[5] = 48; str[6] = 0;}
-            CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 50, 105+i*30, 50, 80, hwnd, LB1+i, NULL, NULL);
-        
+        for( int i=0; i<10; i++ ){        
+            char str[7];
+            sprintf( str, "out %d", i+1 );
+            CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 50, 105+i*30, 50, 80, hwnd, LB1+i, NULL, NULL);        
             cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 100, 100+i*30, 90, 800, hwnd, CB1+i, NULL, NULL);
-            SendMessage( cbs[i], CB_ADDSTRING, 0, "None");
-            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            EnableWindow( cbs[i], 0 );
-            
-            CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 250, 105+i*30, 50, 80, hwnd, LB1+10+i, NULL, NULL);            
-        
+            EnableWindow( cbs[i], 0 );            
+            CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 250, 105+i*30, 50, 80, hwnd, LB1+10+i, NULL, NULL);        
             cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 300, 100+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);            
             int j=0;
             while( filters[j] )
                 SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j++]->name );
             SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            EnableWindow( cbs2[i], 0 );
-
-        }
-
+            EnableWindow( cbs2[i], 0 ); }
+        
         // SHOW
         ShowWindow( hwnd, SW_SHOW );
 
@@ -790,18 +822,22 @@
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
             if( Pa_GetDeviceInfo( i )->maxInputChannels ){
                 ci = SendMessage( hCombo1, CB_ADDSTRING, 0, device_name( i ) );
-                if( conf_get( "device1" ) && strcmp( conf_get( "device1" ), device_name( i ) ) == 0 ){
-                    SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 );
-                    conf_used++; }}
+                if( conf_get( "device1" ) && strcmp( conf_get( "device1" ), device_name( i ) ) == 0 )
+                    SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 ); }
             if( Pa_GetDeviceInfo( i )->maxOutputChannels ){
                 ci = SendMessage( hCombo2, CB_ADDSTRING, 0, device_name( i ) );
-                if( conf_get( "device2" ) && strcmp( conf_get( "device2" ), device_name( i ) ) == 0 ){
-                    SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 );
-                    conf_used++; }} }
+                if( conf_get( "device2" ) && strcmp( conf_get( "device2" ), device_name( i ) ) == 0 )
+                    SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 ); } }
         if( SendMessage( hCombo1, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
         if( SendMessage( hCombo2, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+
+        char txt[250];
+        GetDlgItemText( hwnd, CMB1, txt, 250 );
+        fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
+
+        show_conf( is_conf_used() );
 
         // loop
         while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
