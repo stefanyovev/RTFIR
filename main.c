@@ -40,7 +40,7 @@
     int convolve_2_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
     int convolve_2_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
 
-    void * f3[13] = {
+    void * f2[13] = {
         &convolve_2_16,
         &convolve_2_32,
         &convolve_2_64,
@@ -527,7 +527,7 @@
                     map[i].k = filters[0]->k;
                     map[i].kn = filters[0]->kn;
                     map[i].knr = filters[0]->knr; int index = 0, v = 16; while( v != map[i].knr ){ v *= 2; index ++; }
-                    map[i].f = f3[index];
+                    map[i].f = f2[index];
                 }
                 threads_start();
                 jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
@@ -604,23 +604,24 @@
         if( cursor > 0 )
             PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); } // 50% == 100%
 
+    char * names = 0;
     char * device_name( int device_id ){
-        static char *names = 0;
         if( !names ){ 
-            names = getmem( Pa_GetDeviceCount() * 250 );
-            memset( names, 0, Pa_GetDeviceCount() * 250 ); }
-        char * name = names + device_id*250;
-        if( !name[0] ){
-            char dev_name[100] = "", drv_name[100] = "";
-            strcpy( dev_name, Pa_GetDeviceInfo( device_id )->name );
-            strcpy( drv_name, Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id )->hostApi )->name );
-            sprintf( name, " %3d  /  %s  /  %s ", device_id, strstr( drv_name, "Windows" ) ? drv_name+8 : drv_name, dev_name ); }
-        return name; }
+            names = getmem( Pa_GetDeviceCount() * 200 );
+            memset( names, 0, Pa_GetDeviceCount() * 200 );
+            char drv_name[50] = "", dev_name[150] = "";
+            for( int i=0; i<Pa_GetDeviceCount(); i++ ){
+                strcpy( dev_name, Pa_GetDeviceInfo( i )->name );
+                strcpy( drv_name, Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name );
+                sprintf( names +i*200, "  %s  /  %s  ", strstr( drv_name, "Windows" ) ? drv_name+8 : drv_name, dev_name ); } }
+        return names +device_id*200; }
 
-    int device_id( char * device_name ){
-        int id; sscanf( device_name, "  %3d", &id );
-        return id; }
-
+    int device_id( char * device_name ){        
+        for( int i=0; i<Pa_GetDeviceCount(); i++ )
+            if( strcmp( names +i*200, device_name ) == 0 )
+                return i;
+        return -1; }
+    
     void fill_left_combos( int count ){
         char n[3];
         for( int i=0; i<10; i++ ){
@@ -635,7 +636,7 @@
         map[out].k = fl->k;
         map[out].kn = fl->kn;
         map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
-        map[out].f = f3[index]; }
+        map[out].f = f2[index]; }
 
     int is_conf_used(){ // wether the two devices selected are as in the conf
         char a[250], b[250];
@@ -820,6 +821,9 @@
 
         // populate device dropdowns
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
+            if( strcmp( Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name, "MME" ) == 0
+                || strcmp( Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name, "Windows DirectSound" ) == 0 )
+                    continue;
             if( Pa_GetDeviceInfo( i )->maxInputChannels ){
                 ci = SendMessage( hCombo1, CB_ADDSTRING, 0, device_name( i ) );
                 if( conf_get( "device1" ) && strcmp( conf_get( "device1" ), device_name( i ) ) == 0 )

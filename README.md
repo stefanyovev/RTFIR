@@ -4,7 +4,6 @@ todos:
  - click/pops on correction (correct on a minute not second)
  - delay
  - reload filters
- - rm directsound & mma; rm devID from ui
  - callback times measure; own load measure; score the cpu
  - log to file not ui or details window; timestamp on lines; label for load;
  - 192/262
