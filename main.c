@@ -55,6 +55,8 @@
         &convolve_2_32768,
         &convolve_2_65536 };
     
+    #define MAX_FILTER_LEN 65536
+    
     int closest_larger_size( len ){ // or equal    
         int mask = 65536;
         while( mask/2 >= len ) mask /= 2;
@@ -62,12 +64,11 @@
 
     // ############################################################################################################ //
     
+    #define SAMPLESIZE sizeof(float)    
+    int samplerate = -1;
     double T0;
-    
-    #define SAMPLERATE 48000 // [samples/second]
-    #define SAMPLESIZE sizeof(float)
 
-    #define NOW ((long)(ceil((PaUtil_GetTime()-T0)*SAMPLERATE))) // [samples]   
+    #define NOW ((long)(ceil((PaUtil_GetTime()-T0)*samplerate))) // [samples]   
      
     #define POINTSMAX 1000  // should be even
     #define POINTSMIN 20
@@ -171,6 +172,9 @@
                 
             if( count == 0 )
                 continue;
+            if( count > MAX_FILTER_LEN ){
+                PRINT( "NOT loaded %s exceeds %d taps \n", r.cFileName, MAX_FILTER_LEN );
+                continue; }
 
             fseek( f, 0, SEEK_SET );
             
@@ -481,7 +485,7 @@
 
     int start( int input_device_id, int output_device_id ){
         for( int i=1; i>-1; i-- ){
-            PRINT( "starting %s %d ... \n", ( i ? "input" : "output" ), ( i ? input_device_id : output_device_id ) );
+            PRINT( "starting %s ... ", ( i ? "input" : "output" ) );
         
             int device_id = ( i ? input_device_id : output_device_id );
             const PaDeviceInfo *device_info = Pa_GetDeviceInfo( device_id );
@@ -498,7 +502,7 @@
                 stream,
                 i ? &params : 0,
                 i ? 0 : &params,
-                SAMPLERATE,
+                samplerate,
                 paFramesPerBufferUnspecified,
                 paClipOff | paDitherOff | paPrimeOutputBuffersUsingStreamCallback, // paNeverDropInput is for full-duplex only
                 &device_tick,
@@ -515,12 +519,12 @@
             
             if( i ){
                 INPORT.channels_count = device_info->maxInputChannels;
-                PRINT( "%d channels \n", INPORT.channels_count );
+                PRINT( "%d channels, ", INPORT.channels_count );
                 canvas = getmem( INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
                 memset( canvas, 0, INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
             } else {
                 OUTPORT.channels_count = device_info->maxOutputChannels;
-                PRINT( "%d channels \n", OUTPORT.channels_count );
+                PRINT( "%d channels, ", OUTPORT.channels_count );
                 map = getmem( OUTPORT.channels_count * sizeof(struct out) );
                 for( int i=0; i<OUTPORT.channels_count; i++ ){
                     map[i].src_chan = -1;
@@ -531,7 +535,6 @@
                 }
                 threads_start();
                 jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
-                PRINT( "JOBSPERCHANNEL %d \n", jobs_per_channel );
             }
             
             err = Pa_StartStream( *stream );
@@ -542,14 +545,10 @@
             PaStreamInfo *stream_info = Pa_GetStreamInfo( *stream );            
             PRINT( "%d / %d \n",
                 (int)round(stream_info->sampleRate),
-                (int)round( i ? (stream_info->inputLatency)*SAMPLERATE : (stream_info->outputLatency)*SAMPLERATE ) );
-        }
+                (int)round( i ? (stream_info->inputLatency)*samplerate : (stream_info->outputLatency)*samplerate ) ); }
 
         // done
-        PRINT( "both started. \n" );
         return 1; }
-
-
 
     // ############################################################################################################ //
     // ############################################################################################################ //
@@ -564,20 +563,28 @@
     RECT rc;
     MSG msg;
 
+    #define R1 (1)
+    #define R2 (2)
+    #define R3 (3)
+    #define R4 (4)
+    #define LL (5)
+    #define BTN01 (121)
+    #define BTN02 (122)
     #define CMB1 (555)
     #define CMB2 (556)
     #define BTN1 (123)
-    
     #define LB1 (110)
     #define CB1 (220)
     #define CB2 (330)
-    
     #define EDT (400)
 
-    HWND hCombo1, hCombo2, hBtn;
+    HWND hr1, hr2, hr3, hr4, hLL, hbctl1, hbctl2, hCombo1, hCombo2, hBtn;
     HWND cbs[10];
     HWND cbs2[10];
     HWND hEdit;
+
+    LOGFONT font1 = {0}, font2 = {0}, font3 = {0};
+    HFONT hfont1, hfont2, hfont3;
 
     void PRINT( char *format, ... ){
         char str[1000] = "";
@@ -601,8 +608,10 @@
 
     void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
         correct_cursor_if_necessary();
-        if( cursor > 0 )
-            PRINT( "load %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); } // 50% == 100%
+        if( cursor > 0 ){
+            char txt[50];
+            sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); // 50% == 100%
+            SetWindowText( hLL, txt ); } }
 
     char * names = 0;
     char * device_name( int device_id ){
@@ -685,7 +694,29 @@
                 GetDlgItemText( hwnd, CMB1, txt, 250 );
                 fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
                 show_conf( is_conf_used() );
-                
+
+            } else if( HIWORD(wParam) == BN_CLICKED && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){
+                char txt[250];
+                GetDlgItemText( hwnd, LOWORD(wParam) == BTN01 ? CMB1 : CMB2, txt, 250 );
+                if( strstr( Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id( txt ) )->hostApi )->name, "ASIO" ) != 0 ){
+                    PaAsio_ShowControlPanel( device_id( txt ), hwnd );
+                } else {
+                    STARTUPINFO si; memset( &si, 0, sizeof(STARTUPINFO) );
+                    PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(PROCESS_INFORMATION) );
+                    si.cb = sizeof(STARTUPINFO);
+                    char cmd[300] = "";
+                    GetWindowsDirectory( cmd, 300 );
+                    strcat( cmd, "\\System32\\control.exe mmsys.cpl,," );
+                    strcat( cmd, (LOWORD(wParam) == BTN01) ? "1" : "0" );
+                    CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
+
+            } else if( HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) <= R4 ){
+                switch( LOWORD(wParam) ){
+                    case R1: samplerate = 44100; break;
+                    case R2: samplerate = 48000; break;
+                    case R3: samplerate = 96000; break;
+                    case R4: samplerate = 192000; }
+
             } else if( LOWORD(wParam) == CMB2 && CBN_SELCHANGE == HIWORD(wParam) ){
                 char txt[250];
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
@@ -699,6 +730,12 @@
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
                 dd = device_id( txt );
                 if( start( sd, dd ) ){                                   // START
+                    EnableWindow( hr1, 0 );
+                    EnableWindow( hr2, 0 );
+                    EnableWindow( hr3, 0 );
+                    EnableWindow( hr4, 0 );
+                    EnableWindow( hbctl1, 0 );
+                    EnableWindow( hbctl2, 0 );
                     EnableWindow( hCombo1, 0 );
                     EnableWindow( hCombo2, 0 );
                     EnableWindow( hBtn, 0 );
@@ -753,7 +790,7 @@
 
     int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
         
-        // SetProcessDPIAware();
+        // UI
         WNDCLASSEX wc;
         memset( &wc, 0, sizeof(wc) );
         wc.cbSize = sizeof(wc);
@@ -765,10 +802,45 @@
         if( !RegisterClassEx(&wc) ){ MessageBox( 0, "Failed to register window class.", "Error", MB_OK ); return 1; }
         hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
         hdc = GetDC( hwnd );
-        hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 10, 490, 8000, hwnd, CMB1, NULL, NULL);
-        hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 10, 40, 490, 8000, hwnd, CMB2, NULL, NULL);
-        hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 10, 77, 53, hwnd, BTN1, NULL, NULL);
+        
+        hr1 = CreateWindowEx( 0, "Button", "44.1k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON|WS_GROUP, 70, 10, 50, 23, hwnd, R1, 0, 0);
+        hr2 = CreateWindowEx( 0, "Button", "48k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 160, 10, 50, 23, hwnd, R2, 0, 0);
+        hr3 = CreateWindowEx( 0, "Button", "96k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 230, 10, 50, 23, hwnd, R3, 0, 0);
+        hr4 = CreateWindowEx( 0, "Button", "192k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 300, 10, 50, 23, hwnd, R4, 0, 0);
+        hLL = CreateWindowEx( 0, "static", "", WS_VISIBLE|WS_CHILD, 410, 13, 80, 15, hwnd, LL, NULL, NULL);
+        SendMessage(hr2, BM_SETCHECK, BST_CHECKED, 0);
+        hbctl1 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 40, 30, 23, hwnd, BTN01, NULL, NULL);
+        hbctl2 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 70, 30, 23, hwnd, BTN02, NULL, NULL);
+        hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
+        hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
+        hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
         hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
+
+        strcpy(font1.lfFaceName, "Wingdings");
+        font1.lfCharSet = DEFAULT_CHARSET;
+        hfont1 = CreateFontIndirect(&font1);
+
+        strcpy(font2.lfFaceName, "Tahoma");
+        font2.lfCharSet = DEFAULT_CHARSET;
+        font2.lfHeight = 16;            
+        hfont2 = CreateFontIndirect(&font2);
+
+        strcpy(font3.lfFaceName, "Tahoma");
+        font3.lfCharSet = DEFAULT_CHARSET;
+        font3.lfHeight = 18;
+        hfont3 = CreateFontIndirect(&font3);
+        
+        SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hr3, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hr4, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hLL, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hbctl1, WM_SETFONT, (WPARAM)hfont1, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hbctl2, WM_SETFONT, (WPARAM)hfont1, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hCombo1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hCombo2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hBtn, WM_SETFONT, (WPARAM)hfont3, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 
         // init core
         if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
@@ -778,10 +850,9 @@
         conf_load( "RTFIR.conf" );
         threads_init();
         PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
-        PRINT( "SAMPLERATE %d \n", SAMPLERATE );
-        PRINT( "Cores/Threads %d/%d\n", threads_cores, threads_count );
 
         // globals
+        samplerate = 48000;
         struct port* ports [2] = { &INPORT, &OUTPORT };
         for( int i=0; i<2; i++ ){
             struct port *p = ports[i];
@@ -803,13 +874,17 @@
 
         // add map labels and dropdowns
         for( int i=0; i<10; i++ ){        
-            char str[7];
+            char str[7]; HANDLE h;
             sprintf( str, "out %d", i+1 );
-            CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 50, 105+i*30, 50, 80, hwnd, LB1+i, NULL, NULL);        
-            cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 100, 100+i*30, 90, 800, hwnd, CB1+i, NULL, NULL);
+            h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 50, 135+i*30, 50, 15, hwnd, LB1+i, NULL, NULL);
+            SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+            cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 100, 130+i*30, 90, 800, hwnd, CB1+i, NULL, NULL);
+            SendMessageA( cbs[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             EnableWindow( cbs[i], 0 );            
-            CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 250, 105+i*30, 50, 80, hwnd, LB1+10+i, NULL, NULL);        
-            cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 300, 100+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);            
+            h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 220, 135+i*30, 50, 15, hwnd, LB1+10+i, NULL, NULL);
+            SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+            cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 260, 130+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);
+            SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             int j=0;
             while( filters[j] )
                 SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j++]->name );

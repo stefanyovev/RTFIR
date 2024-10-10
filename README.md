@@ -1,13 +1,12 @@
 todos:
  - detect avx, fallback to sse, with createprocess
- - warn about maximum filter length, dont load it
  - click/pops on correction (correct on a minute not second)
  - delay
  - reload filters
  - callback times measure; own load measure; score the cpu
- - log to file not ui or details window; timestamp on lines; label for load;
+ - timestamp on lines; details window;
  - 192/262
- - link to sound control panel
+ - SR in conf
  - configure ui available before start
 
 cpu usage:
@@ -16,6 +15,7 @@ cpu usage:
  - waitforsingleobject, timerobject to min time 100ns (5-6 samples) to sleep thread; its in "if work if work if work .."
 
 timing:
+ - rdtsc on a single core || QueryUnbiasedInterruptTimePrecise
  - correct on a minute not second
  - dont consider first 10 callbacks. if priming dont aftermath; static inport_countdown, outport_countdown
  - consider last 3 sec for min/max
