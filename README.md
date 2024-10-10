@@ -4,7 +4,7 @@ todos:
  - delay
  - reload filters
  - callback times measure; own load measure; score the cpu
- - timestamp on lines; details window;
+ - details window;
  - 192/262
  - SR in conf
  - configure ui available before start

@@ -371,6 +371,17 @@
         }
     }
 
+    char* timestr(){
+        static char str[30];
+        long now = NOW;
+        int s = now/samplerate;
+        int m = s/60;
+        int h = m/60;
+        if( h ) sprintf( str, "%dh %dm %ds", h, m, s );
+        else if( m ) sprintf( str, "%dm %ds", m, s );
+        else sprintf( str, "%ds", s );
+        return str; }
+
     void correct_cursor_if_necessary(){
         if( diffs_full || diffs_i > 0 ){
             long diffs_sum = 0;
@@ -390,7 +401,7 @@
                     diffs_sum = (long)( ceil( diffs_avg ) );
                 if( diffs_sum != 0 ){ // may round to zero
                     cursor -= diffs_sum;
-                    PRINT( "correction of %d samples \n", diffs_sum );
+                    PRINT( "[%s] correction of %d samples \n", timestr(), diffs_sum );
                     diffs_full = diffs_i = 0;
                 }
             }
