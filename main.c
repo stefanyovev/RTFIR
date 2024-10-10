@@ -373,7 +373,7 @@
 
     char* timestr(){
         static char str[30];
-        long now = NOW;
+        long now = cursor;
         int s = now/samplerate;
         int m = s/60;
         int h = m/60;
@@ -658,15 +658,20 @@
         map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
         map[out].f = f2[index]; }
 
-    int is_conf_used(){ // wether the two devices selected are as in the conf
+    int devices_as_in_conf(){ // whether the two devices selected are as in the conf
         char a[250], b[250];
         if( !conf_get( "device1" ) || !conf_get( "device2" ) ) return 0;
         GetDlgItemText( hwnd, CMB1, a, 250);
         GetDlgItemText( hwnd, CMB2, b, 250);
         return strcmp( a, conf_get( "device1" ) ) == 0 && strcmp( b, conf_get( "device2" ) ) == 0; }
 
-    void show_conf( int b ){ // sets the bottom combos as in conf or clear them
-        if( !b ){
+    int samplerate_as_in_conf(){ // whether the selected samplerate is as in the conf
+        if( !conf_get( "samplerate" ) ) return 0;
+        int samplerate_from_conf = -1;
+        return sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 && samplerate_from_conf == samplerate; }
+
+    void show_conf(){ // sets the bottom combos as in conf or clear them; routing if devices are same and filters if devs&SR are same
+        if( !devices_as_in_conf() ){
             for( int i=0; i<10; i++ ){
                 SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
                 SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
@@ -678,12 +683,14 @@
                 SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)val, (LPARAM)0 );
             else SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
             sprintf( key, "filter%d", i+1 );
-            if( conf_get( key ) && filter_p( conf_get( key ) ) )
+            if( samplerate_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) ) )
                 SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 );
             else SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
 
     void save_conf(){
         char txt[250], key[20];
+        sprintf( txt, "%d", samplerate );
+        conf_set( "samplerate", txt );
         GetDlgItemText( hwnd, CMB1, txt, 250 );
         conf_set( "device1", txt );
         GetDlgItemText( hwnd, CMB2, txt, 250 );
@@ -704,7 +711,7 @@
                 char txt[250];
                 GetDlgItemText( hwnd, CMB1, txt, 250 );
                 fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
-                show_conf( is_conf_used() );
+                show_conf();
 
             } else if( HIWORD(wParam) == BN_CLICKED && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){
                 char txt[250];
@@ -727,11 +734,12 @@
                     case R2: samplerate = 48000; break;
                     case R3: samplerate = 96000; break;
                     case R4: samplerate = 192000; }
+                    show_conf();
 
             } else if( LOWORD(wParam) == CMB2 && CBN_SELCHANGE == HIWORD(wParam) ){
                 char txt[250];
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
-                show_conf( is_conf_used() );
+                show_conf();
                 
             } else if( LOWORD(wParam) == BTN1 ){
                 int sd, dd;
@@ -756,10 +764,10 @@
                             for( int j=0; j<INPORT.channels_count; j++ ){
                                 char key[6]; int val;
                                 sprintf( key, "out%d", i+1 );
-                                if( is_conf_used() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+                                if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
                                     map[i].src_chan = val-1;
                                 sprintf( key, "filter%d", i+1 );
-                                if( is_conf_used() && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
+                                if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
                                     set_filter( i, filter_p( conf_get( key ) ) );
                                     SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 ); } }
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src_chan+1, (LPARAM)0 );
@@ -905,6 +913,15 @@
         // SHOW
         ShowWindow( hwnd, SW_SHOW );
 
+        // samplerate ?
+        int samplerate_from_conf = -1;
+        if( conf_get( "samplerate" ) && sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 ){
+            switch( samplerate_from_conf ){
+                case 44100: SendMessage( hr1, BM_CLICK, 0, 0 ); break;
+                case 48000: SendMessage( hr2, BM_CLICK, 0, 0 ); break;
+                case 96000: SendMessage( hr3, BM_CLICK, 0, 0 ); break;
+                case 192000: SendMessage( hr4, BM_CLICK, 0, 0 ); } }
+
         // populate device dropdowns
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
             if( strcmp( Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name, "MME" ) == 0
@@ -918,6 +935,7 @@
                 ci = SendMessage( hCombo2, CB_ADDSTRING, 0, device_name( i ) );
                 if( conf_get( "device2" ) && strcmp( conf_get( "device2" ), device_name( i ) ) == 0 )
                     SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)ci, (LPARAM)0 ); } }
+        // if no selection choose the first in the list
         if( SendMessage( hCombo1, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo1, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
         if( SendMessage( hCombo2, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
@@ -927,7 +945,7 @@
         GetDlgItemText( hwnd, CMB1, txt, 250 );
         fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
 
-        show_conf( is_conf_used() );
+        show_conf();
 
         // loop
         while( GetMessage( &msg, 0, 0, 0 ) > 0 ){

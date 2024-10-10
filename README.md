@@ -3,10 +3,10 @@ todos:
  - click/pops on correction (correct on a minute not second)
  - delay
  - reload filters
+ - default filter highpass
  - callback times measure; own load measure; score the cpu
  - details window;
  - 192/262
- - SR in conf
  - configure ui available before start
 
 cpu usage:
