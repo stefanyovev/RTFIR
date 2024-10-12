@@ -39,8 +39,9 @@
     int convolve_2_16384 ( float* in, float* out, int length, float* kernel, int kernel_length );
     int convolve_2_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
     int convolve_2_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    int convolve_2_131072 ( float* in, float* out, int length, float* kernel, int kernel_length );
 
-    void * f2[13] = {
+    void * f2[14] = {
         &convolve_2_16,
         &convolve_2_32,
         &convolve_2_64,
@@ -53,12 +54,13 @@
         &convolve_2_8192,
         &convolve_2_16384,
         &convolve_2_32768,
-        &convolve_2_65536 };
+        &convolve_2_65536,
+        &convolve_2_131072 };
     
-    #define MAX_FILTER_LEN 65536
+    #define MAX_FILTER_LEN 131072
     
     int closest_larger_size( len ){ // or equal    
-        int mask = 65536;
+        int mask = MAX_FILTER_LEN;
         while( mask/2 >= len ) mask /= 2;
         return mask < 16 ? 16 : mask; }
 
@@ -866,6 +868,7 @@
         conf_load( "RTFIR.conf" );
         threads_init();
         PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
+        PRINT( "max filter length %d taps \n", MAX_FILTER_LEN );
 
         // globals
         samplerate = 48000;

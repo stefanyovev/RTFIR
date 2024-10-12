@@ -6,7 +6,6 @@ todos:
  - default filter highpass
  - callback times measure; own load measure; score the cpu
  - details window;
- - 192/262
  - configure ui available before start
 
 cpu usage:
