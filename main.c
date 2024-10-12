@@ -373,13 +373,11 @@
 
     char* timestr(){
         static char str[30];
-        long now = cursor;
-        int s = now/samplerate;
-        int m = s/60;
-        int h = m/60;
-        if( h ) sprintf( str, "%dh %dm %ds", h, m, s );
-        else if( m ) sprintf( str, "%dm %ds", m, s );
-        else sprintf( str, "%ds", s );
+        long total = cursor / samplerate; // seconds
+        int h = total / 3600;
+        int m = total / 60 - h*60;
+        int s = total -h*3600 -m*60;
+        sprintf( str, "%.2d:%.2d:%.2d", h, m, s );
         return str; }
 
     void correct_cursor_if_necessary(){
@@ -554,8 +552,7 @@
                 return 0; }
 
             PaStreamInfo *stream_info = Pa_GetStreamInfo( *stream );            
-            PRINT( "%d / %d \n",
-                (int)round(stream_info->sampleRate),
+            PRINT( "%d samples buffersize\n",
                 (int)round( i ? (stream_info->inputLatency)*samplerate : (stream_info->outputLatency)*samplerate ) ); }
 
         // done
