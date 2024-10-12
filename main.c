@@ -706,14 +706,16 @@
 
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
-        
-            if( LOWORD(wParam) == CMB1 && CBN_SELCHANGE == HIWORD(wParam) ){
-                char txt[250];
-                GetDlgItemText( hwnd, CMB1, txt, 250 );
-                fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
-                show_conf();
 
-            } else if( HIWORD(wParam) == BN_CLICKED && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){
+            if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){
+                switch( LOWORD(wParam) ){
+                    case R1: samplerate = 44100; break;
+                    case R2: samplerate = 48000; break;
+                    case R3: samplerate = 96000; break;
+                    case R4: samplerate = 192000; }
+                    show_conf();
+
+            } else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){
                 char txt[250];
                 GetDlgItemText( hwnd, LOWORD(wParam) == BTN01 ? CMB1 : CMB2, txt, 250 );
                 if( strstr( Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id( txt ) )->hostApi )->name, "ASIO" ) != 0 ){
@@ -728,15 +730,13 @@
                     strcat( cmd, (LOWORD(wParam) == BTN01) ? "1" : "0" );
                     CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
-            } else if( HIWORD(wParam) == BN_CLICKED && LOWORD(wParam) <= R4 ){
-                switch( LOWORD(wParam) ){
-                    case R1: samplerate = 44100; break;
-                    case R2: samplerate = 48000; break;
-                    case R3: samplerate = 96000; break;
-                    case R4: samplerate = 192000; }
-                    show_conf();
+            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){
+                char txt[250];
+                GetDlgItemText( hwnd, CMB1, txt, 250 );
+                fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
+                show_conf();
 
-            } else if( LOWORD(wParam) == CMB2 && CBN_SELCHANGE == HIWORD(wParam) ){
+            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){
                 char txt[250];
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
                 show_conf();
