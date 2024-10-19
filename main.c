@@ -9,7 +9,7 @@
     
     #include <windows.h>
     
-    #include "portaudio_import.c"
+    #include "portaudio.dll.import.c"
     #include "conf.c"
     #include "convolve.c"
 
