@@ -6,9 +6,12 @@
     #include <stdlib.h>
     #include <string.h>
     #include <math.h>
+    
     #include <windows.h>
-    #include <portaudio.h>
+    
+    #include "portaudio_import.c"
     #include "conf.c"
+    #include "convolve.c"
 
     void PRINT( char *format, ... );
     void MSGBOX( char *format, ... );
@@ -17,10 +20,6 @@
         void *p = malloc( count );
         if( !p ){ MSGBOX( "Out of memory" ); exit(1); }
         return p; }
-
-    void PaUtil_InitializeClock( void );
-    double PaUtil_GetTime( void );
-    
     
     // ############################################################################################################ //
 
@@ -59,7 +58,7 @@
     
     #define MAX_FILTER_LEN 131072
     
-    int closest_larger_size( len ){ // or equal    
+    int closest_larger_size( int len ){ // or equal    
         int mask = MAX_FILTER_LEN;
         while( mask/2 >= len ) mask /= 2;
         return mask < 16 ? 16 : mask; }
@@ -243,7 +242,7 @@
         threads_shutdown = 0; }
 
     struct thread {
-        int status; // 0 done; 1 work; 2 emerging
+        volatile int status; // 0 done; 1 work; 2 emerging
         void (* f)( float*, float*, int, float*, int );
         float *in;
         float *out;
@@ -861,6 +860,11 @@
         SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 
         // init core
+        switch( portaduio_import() ){
+            case 1: PRINT( "ERROR: could not load portaudio.dll" ); break;
+            case 2: PRINT( "ERROR: portaudio.dll is missing Pa_GetVersion" );
+            case 3: PRINT( "ERROR: portaudio.dll is missing PaUtil_InitializeClock or PaUtil_GetTime" ); break;
+            case 4: PRINT( "ERROR: portaudio.dll is missing PaAsio_ShowControlPanel" ); break; }
         if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
         if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );
         PaUtil_InitializeClock();
