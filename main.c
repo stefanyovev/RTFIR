@@ -6,12 +6,10 @@
     #include <stdlib.h>
     #include <string.h>
     #include <math.h>
-    
+    #include <immintrin.h>
     #include <windows.h>
-    
     #include "portaudio.dll.import.c"
     #include "conf.c"
-    #include "convolve.c"
 
     void PRINT( char *format, ... );
     void MSGBOX( char *format, ... );
@@ -20,51 +18,19 @@
         void *p = malloc( count );
         if( !p ){ MSGBOX( "Out of memory" ); exit(1); }
         return p; }
-    
-    // ############################################################################################################ //
 
-    int convolve_0 ( float* in, float* out, int length, float* kernel, int kernel_length ); // basic
-    int convolve_1 ( float* in, float* out, int length, float* kernel, int kernel_length ); // sse
-    int convolve_2_16 ( float* in, float* out, int length, float* kernel, int kernel_length ); // avx
-    int convolve_2_32 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_64 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_128 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_256 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_512 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_1024 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_2048 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_4096 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_8192 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_16384 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_32768 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_65536 ( float* in, float* out, int length, float* kernel, int kernel_length );
-    int convolve_2_131072 ( float* in, float* out, int length, float* kernel, int kernel_length );
+    void *aligned_malloc(size_t bytes, size_t alignment) {
+        void *p1, *p2; p1 = getmem(bytes + alignment + sizeof(size_t));
+        size_t addr = (size_t)p1 +alignment +sizeof(size_t);
+        p2 = (void *)(addr -(addr%alignment));
+        *((size_t *)p2-1) = (size_t)p1;
+        return p2; }
 
-    void * f2[14] = {
-        &convolve_2_16,
-        &convolve_2_32,
-        &convolve_2_64,
-        &convolve_2_128,
-        &convolve_2_256,
-        &convolve_2_512,
-        &convolve_2_1024,
-        &convolve_2_2048,
-        &convolve_2_4096,
-        &convolve_2_8192,
-        &convolve_2_16384,
-        &convolve_2_32768,
-        &convolve_2_65536,
-        &convolve_2_131072 };
-    
-    #define MAX_FILTER_LEN 131072
-    
-    int closest_larger_size( int len ){ // or equal    
-        int mask = MAX_FILTER_LEN;
-        while( mask/2 >= len ) mask /= 2;
-        return mask < 16 ? 16 : mask; }
+    void aligned_free(void *p ){
+        free((void *)(*((size_t *) p-1))); }
 
     // ############################################################################################################ //
-    
+
     #define SAMPLESIZE sizeof(float)    
     int samplerate = -1;
     double T0;
@@ -103,15 +69,12 @@
     int diffs_i;
     int diffs_full;
 
-
     float *canvas;
     
     struct out {
         int src_chan;
-        float *k;
+        __m256 *k;
         int kn;
-        int knr;
-        int (* f)( float*, float*, int, float*, int );
     }
     
     *map;
@@ -122,11 +85,13 @@
     // ####################### FILTERS ###############################################################################
     // ####################### FILTERS ###############################################################################
     
+    #define MAX_FILTER_LEN 131072
+    #define ALIGNMENT 32
+    
     struct filter {
         char *name;
         float* k;
         int kn;
-        int knr;
     }
     
     *filters[100]; // null terminated list of pointers
@@ -147,61 +112,75 @@
         memset( filters, 0, sizeof(struct filter *) );
         filters[0] = getmem( sizeof( struct filter ) );
         filters[0]->name = "None";
-        filters[0]->knr = closest_larger_size(1);
-        filters[0]->k = getmem( SAMPLESIZE * (filters[0]->knr) );
-        memset( filters[0]->k, 0, SAMPLESIZE * (filters[0]->knr) );
+        filters[0]->k = getmem( SAMPLESIZE * 1 );
         filters[0]->k[0] = 1.0;
-        filters[0]->kn = 1;
+        filters[0]->kn = 1;        
         WIN32_FIND_DATA r;
-        HANDLE h = FindFirstFile( "filters\\*", &r );
-        if( h == INVALID_HANDLE_VALUE )
-            return;
+        HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
         int i = 1;
         do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
-            char fname[100] = "";
-            sprintf( fname, "filters\\%s", r.cFileName );
-            
-            FILE *f;
-            f = fopen( fname, "r" );
-            if( !f )
-                continue;
-                
+            char fname[100] = ""; sprintf( fname, "filters\\%s", r.cFileName );
+            FILE *f = fopen( fname, "r" );
+            if( !f ) continue;
             int count = 0;
-            float num;
-            while( fscanf( f, "%f", &num ) == 1 )
-                count ++;
-                
-            if( count == 0 )
-                continue;
+            float num; while( fscanf( f, "%f", &num ) == 1 ) count ++;
+            if( count == 0 ) continue;
             if( count > MAX_FILTER_LEN ){
                 PRINT( "NOT loaded %s exceeds %d taps \n", r.cFileName, MAX_FILTER_LEN );
                 continue; }
-
             fseek( f, 0, SEEK_SET );
-            
-            int real_len = closest_larger_size(count);
-            float *data = getmem( SAMPLESIZE * real_len );
-            memset( data, 0, SAMPLESIZE * real_len );
-            int j=0 ;
-            while( fscanf( f, "%f", data + (j++) ) == 1 );
-            
+            float *data = malloc( SAMPLESIZE * count );
+            for( int j=0; j<count; j++ )
+                fscanf( f, "%f", data +j );
             PRINT( "loaded %s %d taps \n", r.cFileName, count );
-            
             fclose(f);
-            
             // push to list
             filters[i] = getmem( sizeof( struct filter ) );
             filters[i]->name = getmem( strlen( fname )+1 );
             strcpy( filters[i]->name, r.cFileName );
             filters[i]->k = data;
             filters[i]->kn = count;
-            filters[i]->knr = real_len;
-            
             i++;
         } while( FindNextFile( h, &r ) );
         FindClose(h);
         PRINT( "loaded %d filters \n", i-1 );
     }
+
+    void set_filter( int out, struct filter * fl ){
+        if( map[out].k ) aligned_free( map[out].k );
+        map[out].kn = ( fl->kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
+        map[out].k = aligned_malloc( map[out].kn * SAMPLESIZE * 8, ALIGNMENT );
+        memset( map[out].k, 0, map[out].kn * SAMPLESIZE * 8 );
+        for(int i=0; i<fl->kn; i++) map[out].k[i] = _mm256_broadcast_ss( fl->k +fl->kn -i -1 );
+        }
+
+    #define SSE_SIMD_LENGTH 4
+    #define AVX_SIMD_LENGTH 8
+    #define VECTOR_LENGTH 16
+    int convolve( float* in, float* out, int length, __m256* kernel, int kernel_length ){
+        // original code: github/hgomersall/SSE-convolution/convolve.c
+        // convolve_avx_unrolled_vector_unaligned_fma
+        __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
+        __m256 acc0 __attribute__ ((aligned (ALIGNMENT)));
+        __m256 acc1 __attribute__ ((aligned (ALIGNMENT)));
+        for(int i=0; i<length-kernel_length; i+=VECTOR_LENGTH){
+            acc0 = _mm256_setzero_ps();
+            acc1 = _mm256_setzero_ps();
+            for(int k=0; k<kernel_length; k+=VECTOR_LENGTH){
+                int data_offset = i + k;
+                for (int l = 0; l < SSE_SIMD_LENGTH; l++){
+                    for (int m = 0; m < VECTOR_LENGTH; m+=SSE_SIMD_LENGTH) {
+                        data_block = _mm256_loadu_ps(in + l + data_offset + m);
+                        acc0 = _mm256_fmadd_ps(kernel[k+l+m], data_block, acc0);
+                        data_block = _mm256_loadu_ps(in + l + data_offset + m + AVX_SIMD_LENGTH);
+                        acc1 = _mm256_fmadd_ps(kernel[k+l+m], data_block, acc1); } } }
+            _mm256_storeu_ps(out+i, acc0);
+            _mm256_storeu_ps(out+i+AVX_SIMD_LENGTH, acc1); }
+        int i = length - kernel_length;
+        out[i] = 0.0;
+        for(int k=0; k<kernel_length; k++){
+            out[i] += in[i+k] * (*((float*)(kernel +kernel_length -k -1 ))); }
+        return 0; }    
 
     // ########################## THREADS ################################################
     // ########################## THREADS ################################################
@@ -243,12 +222,11 @@
 
     struct thread {
         volatile int status; // 0 done; 1 work; 2 emerging
-        void (* f)( float*, float*, int, float*, int );
         float *in;
         float *out;
         int len;
-        float *k;
-        int klen;
+        __m256* *k;
+        int kn;
     }
     
     threads[THREADSMAX];
@@ -258,12 +236,12 @@
             while( self->status != 1 )
                 if( threads_shutdown )
                     return;
-            self->f(
-                self->in -self->klen+1, // * matlab
+            convolve(
+                self->in -self->kn+1, // * matlab
                 self->out,
-                self->len +self->klen-1, // * format
+                self->len +self->kn-1, // * format
                 self->k,
-                self->klen
+                self->kn
                 );
             self->status = 0; } }
 
@@ -282,17 +260,16 @@
                 return 0;
         return 1; }
 
-    void threads_submit( void *f, float *in, float *out, int len, float *k, int klen ){
+    void threads_submit( float *in, float *out, int len, __m256 *k, int kn ){
         while( 1 )
             for( int i=0; i<threads_count; i++ )
                 if( threads[i].status == 0 ){
                     threads[i].status = 2;
-                    threads[i].f = f;
                     threads[i].in = in;
                     threads[i].out = out;
                     threads[i].len = len;
                     threads[i].k = k;
-                    threads[i].klen = klen;
+                    threads[i].kn = kn;
                     threads[i].status = 1;
                     return; } }
     
@@ -460,12 +437,11 @@
                     int rem = frameCount % jobs_per_channel;                        
                     for( int j = 0; j<jobs_per_channel; j++ )
                         threads_submit(
-                            map[i].f,
                             canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE +j*jlen,
                             output[i] +j*jlen,
                             (j == jobs_per_channel-1) ? jlen+rem : jlen,
                             map[i].k,
-                            map[i].knr
+                            map[i].kn
                             );
                 }
 
@@ -536,13 +512,10 @@
                 OUTPORT.channels_count = device_info->maxOutputChannels;
                 PRINT( "%d channels, ", OUTPORT.channels_count );
                 map = getmem( OUTPORT.channels_count * sizeof(struct out) );
+                memset( map, 0, OUTPORT.channels_count * sizeof(struct out) );
                 for( int i=0; i<OUTPORT.channels_count; i++ ){
                     map[i].src_chan = -1;
-                    map[i].k = filters[0]->k;
-                    map[i].kn = filters[0]->kn;
-                    map[i].knr = filters[0]->knr; int index = 0, v = 16; while( v != map[i].knr ){ v *= 2; index ++; }
-                    map[i].f = f2[index];
-                }
+                    set_filter( i, filters[0] ); }
                 threads_start();
                 jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
             }
@@ -649,12 +622,6 @@
             for( int j=0; j<count; j++ ){
                 sprintf( n, "%d", j+1 );
                 SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } } }
-
-    void set_filter( int out, struct filter * fl ){
-        map[out].k = fl->k;
-        map[out].kn = fl->kn;
-        map[out].knr = fl->knr; int index = 0, v = 16; while( v != map[out].knr ){ v *= 2; index ++; }
-        map[out].f = f2[index]; }
 
     int devices_as_in_conf(){ // whether the two devices selected are as in the conf
         char a[250], b[250];

@@ -6,6 +6,7 @@ todos:
  - callback times measure; own load measure; score the cpu
  - details window;
  - configure ui available before start
+ - test convolve; sizes
 
 cpu usage:
  - make threads stoppable
