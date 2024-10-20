@@ -816,6 +816,7 @@
         wc.lpszClassName = "mainwindow";
         wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
         wc.hCursor = LoadCursor( 0, IDC_ARROW );
+        wc.hIcon = LoadIcon(hInstance, "icon1");
         if( !RegisterClassEx(&wc) ){ MessageBox( 0, "Failed to register window class.", "Error", MB_OK ); return 1; }
         hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
         hdc = GetDC( hwnd );
