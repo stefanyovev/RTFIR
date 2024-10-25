@@ -1,15 +1,15 @@
 
+if [ -d dist ]; then
+    rm dist
+fi
+
+mkdir dist
+
 cd portaudio
 cmake -D WIN32=1 -D PA_USE_ASIO=ON -D PA_USE_MME=OFF -D PA_USE_DS=OFF -D BUILD_SHARED_LIBS=ON -D BUILD_STATIC_LIBS=ON -D LINK_PRIVATE_SYMBOLS=ON -D WINDOWS_EXPORT_ALL_SYMBOLS=ON .
 cmake --build .
-cp msys-portaudio-2.dll ../
+mv msys-portaudio-2.dll ../dist/portaudio.dll
 cd ..
-mv msys-portaudio-2.dll portaudio.dll
-
-
-if [ -f RTFIR.exe ]; then
-    rm RTFIR.exe
-fi
 
 g++ -c main.c -std=c99 -lstdc++ -march=native -O3 -mwindows -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w
 
@@ -38,10 +38,12 @@ END
 
 windres main.rc -O coff -o main.res
 rm main.rc
-g++ main.o main.res -lstdc++ -lgdi32 -o RTFIR
+g++ main.o main.res -lstdc++ -lgdi32 -mwindows -o dist/RTFIR
 rm main.res
 rm main.o
 
-if [ -f RTFIR.exe ]; then
-    ./RTFIR.exe &
+cp -r filters dist/filters
+
+if [ -f dist/RTFIR.exe ]; then
+    ./dist/RTFIR.exe &
 fi

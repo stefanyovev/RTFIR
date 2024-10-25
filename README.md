@@ -6,7 +6,6 @@ todos:
  - details window;
  - configure ui available before start 
  - test convolve; sizes
- - portaudio from source
  - callback times measure; own load measure; score the cpu  
  - detect avx, fallback to sse, with createprocess
 
