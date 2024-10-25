@@ -1,17 +1,13 @@
 
-if [ -d dist ]; then
-    rm dist
-fi
+# msys2
 
-mkdir dist
+pacman -S mingw-w64-ucrt-x86_64-gcc --needed
+pacman -S make --needed
+pacman -S cmake --needed
 
-cd portaudio
-cmake -D WIN32=1 -D PA_USE_ASIO=ON -D PA_USE_MME=OFF -D PA_USE_DS=OFF -D BUILD_SHARED_LIBS=ON -D BUILD_STATIC_LIBS=ON -D LINK_PRIVATE_SYMBOLS=ON -D WINDOWS_EXPORT_ALL_SYMBOLS=ON .
-cmake --build .
-mv msys-portaudio-2.dll ../dist/portaudio.dll
-cd ..
-
-g++ -c main.c -std=c99 -lstdc++ -march=native -O3 -mwindows -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w
+cp -rf main.c portaudio
+cp -rf conf.c portaudio
+cp -rf main.ico portaudio
 
 echo "
 main.ico ICON \"main.ico\"
@@ -34,16 +30,32 @@ BEGIN
     VALUE \"Translation\", 0x809, 1252
   END
 END
-" >> main.rc
+" > portaudio/main.rc
 
-windres main.rc -O coff -o main.res
-rm main.rc
-g++ main.o main.res -lstdc++ -lgdi32 -mwindows -o dist/RTFIR
-rm main.res
-rm main.o
-
-cp -r filters dist/filters
-
-if [ -f dist/RTFIR.exe ]; then
-    ./dist/RTFIR.exe &
+# -------------------------------------------------
+if [ ! -f portaudio/CMakeLists.txt.changed ]; then
+    echo "
+    add_compile_options(-std=c99 -march=native -O3 -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w)
+    add_executable(RTFIR main.c main.rc)
+    target_link_libraries(RTFIR PortAudio gdi32 stdc++ -mwindows)
+    " > portaudio/CMakeLists.txt.changed
+    cat portaudio/CMakeLists.txt.changed >> portaudio/CMakeLists.txt
 fi
+
+# -------------------------------------------------
+cd portaudio
+rm -f CMakeCache.txt
+rm -rf CMakeFiles
+cmake -D WIN32=1 -D PA_USE_ASIO=ON -D PA_USE_WMME=OFF -D PA_USE_DS=OFF -D BUILD_SHARED_LIBS=OFF -D LINK_PRIVATE_SYMBOLS=ON .
+cmake --build .
+if [ $? -ne 0  ]; then exit; fi;
+cd ..
+
+# -------------------------------------------------
+rm -rf dist
+mkdir dist
+cp -r filters dist
+cp portaudio/RTFIR.exe dist
+
+# -------------------------------------------------
+./dist/RTFIR.exe&

@@ -1,5 +1,4 @@
 
-
     #define title "RTFIR"
 
     #include <stdio.h>
@@ -8,7 +7,8 @@
     #include <math.h>
     #include <immintrin.h>
     #include <windows.h>
-    #include "portaudio.dll.import.c"
+    #include "portaudio.h"
+    #include "pa_util.h"
     #include "conf.c"
 
     void PRINT( char *format, ... );
@@ -828,11 +828,6 @@
         SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 
         // init core
-        switch( portaduio_import() ){
-            case 1: PRINT( "ERROR: could not load portaudio.dll" ); break;
-            case 2: PRINT( "ERROR: portaudio.dll is missing Pa_GetVersion" );
-            case 3: PRINT( "ERROR: portaudio.dll is missing PaUtil_InitializeClock or PaUtil_GetTime" ); break;
-            case 4: PRINT( "ERROR: portaudio.dll is missing PaAsio_ShowControlPanel" ); break; }
         if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
         if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );
         PaUtil_InitializeClock();
@@ -896,9 +891,6 @@
 
         // populate device dropdowns
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
-            if( strcmp( Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name, "MME" ) == 0
-                || strcmp( Pa_GetHostApiInfo( Pa_GetDeviceInfo( i )->hostApi )->name, "Windows DirectSound" ) == 0 )
-                    continue;
             if( Pa_GetDeviceInfo( i )->maxInputChannels ){
                 ci = SendMessage( hCombo1, CB_ADDSTRING, 0, device_name( i ) );
                 if( conf_get( "device1" ) && strcmp( conf_get( "device1" ), device_name( i ) ) == 0 )
