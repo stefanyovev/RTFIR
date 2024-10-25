@@ -225,7 +225,7 @@
         float *in;
         float *out;
         int len;
-        __m256* *k;
+        __m256* k;
         int kn;
     }
     

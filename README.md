@@ -1,12 +1,14 @@
 todos:
- - detect avx, fallback to sse, with createprocess
  - delay
  - reload filters
+ - filters on inputs
  - default filter highpass or play dimmed
- - callback times measure; own load measure; score the cpu
  - details window;
- - configure ui available before start
+ - configure ui available before start 
  - test convolve; sizes
+ - portaudio from source
+ - callback times measure; own load measure; score the cpu  
+ - detect avx, fallback to sse, with createprocess
 
 cpu usage:
  - make threads stoppable

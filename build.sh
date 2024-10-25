@@ -1,4 +1,15 @@
 
+#build portaudio:
+#cmake -D WIN32=1 -D PA_USE_ASIO=ON -D PA_USE_MME=OFF -D PA_USE_DS=OFF -D BUILD_SHARED_LIBS=ON -D BUILD_STATIC_LIBS=ON -D LINK_PRIVATE_SYMBOLS=ON -D WINDOWS_EXPORT_ALL_SYMBOLS=ON .
+#cmake --build .
+#link: -lole32 -lsetupapi -lwinmm -lstdc++
+
+if [ -f RTFIR.exe ]; then
+    rm RTFIR.exe
+fi
+
+g++ -c main.c -std=c99 -lstdc++ -march=native -O3 -mwindows -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w
+
 echo "
 main.ico ICON \"main.ico\"
 1 VERSIONINFO
@@ -24,11 +35,9 @@ END
 
 windres main.rc -O coff -o main.res
 rm main.rc
+g++ main.o main.res -lstdc++ -lgdi32 -o RTFIR
+rm main.res
 
-gcc main.c main.res -o RTFIR -std=c99 -O3 -march=native -mwindows -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w
-
-if [ $? -eq 0 ]; then
+if [ -f RTFIR.exe ]; then
     ./RTFIR.exe &
 fi
-
-rm main.res
