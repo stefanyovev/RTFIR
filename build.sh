@@ -13,29 +13,7 @@ fi
 cp -rf main.c portaudio
 cp -rf conf.c portaudio
 cp -rf main.ico portaudio
-
-echo "
-main.ico ICON \"main.ico\"
-1 VERSIONINFO
-FILEVERSION     2024,10,26,1
-BEGIN
-  BLOCK \"StringFileInfo\"
-  BEGIN
-    BLOCK \"080904E4\"
-    BEGIN      
-      VALUE \"ProductName\", \"RTFIR\"
-      VALUE \"ProductVersion\", \"10\"
-      VALUE \"LegalCopyright\", \"RTFIR.com\"
-      VALUE \"OriginalFilename\", \"RTFIR.exe\"
-      VALUE \"FileDescription\", \"Realtime Sound EQ\"
-    END
-  END
-  BLOCK \"VarFileInfo\"
-  BEGIN
-    VALUE \"Translation\", 0x809, 1252
-  END
-END
-" > portaudio/main.rc
+cp -rf main.rc portaudio
 
 # -------------------------------------------------
 if [ ! -f cache/CMakeLists_changed ]; then
