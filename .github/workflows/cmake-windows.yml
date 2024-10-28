@@ -21,6 +21,8 @@ jobs:
           cmake
           make
     - uses: actions/checkout@v4
+      with:
+        submodules: recursive
     - name: Configure CMake
       run: cmake .
 
