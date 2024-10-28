@@ -9,6 +9,7 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    vcpkg_triplet: x64-mingw-static
 
     steps:
     - uses: actions/checkout@v4
