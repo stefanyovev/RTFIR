@@ -32,5 +32,7 @@ jobs:
     - name: Archive
       uses: actions/upload-artifact@v4
       with:
-        name: RTFIR.exe
-        path: RTFIR.exe
+        name: RTFIR
+        path: |
+          filters
+          RTFIR.exe
