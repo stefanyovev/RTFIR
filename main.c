@@ -1,157 +1,180 @@
 
-    #define title "RTFIR"
-
     #include <stdio.h>
     #include <stdlib.h>
+	#include <stdint.h>
     #include <string.h>
     #include <math.h>
-    #include <immintrin.h>
-    #include <windows.h>
-    #include "portaudio.h"
-    #include "pa_util.h"
+	#include <immintrin.h>	
+    #include <windows.h>    
+	#include "portaudio.h"
+	
     #include "conf.c"
 
-    void PRINT( char *format, ... );
-    void MSGBOX( char *format, ... );
+    // ------------------------------------------------------------------------------------------------------------ //
+	// ------------------------------------------ print ----------------------------------------------------------- //
 
-    void * getmem( long count ){
+	void PRINT( char *format, ... );
+
+    // #define CONSOLE_WIDTH 80
+    // #define CONSOLE_HEIGHT 12
+
+    // volatile char console [ (CONSOLE_WIDTH+1)*CONSOLE_HEIGHT + 1] = "";
+    // volatile int _console_lock_ = 0;
+
+    // void PRINT ( char *format, ... ) {
+
+        // static int cursor = 0, lines = 1;
+        // static int firstline_len = 0, lastline_len = 0;
+
+        // char str[1000] = "";
+        // va_list( args );
+        // va_start( args, format );
+        // vsprintf( str, format, args );
+        // va_end( args );
+        // if( str[0] == 0 )
+            // return;
+
+        // while( _console_lock_ == 1 );
+        // _console_lock_ = 1;
+
+        // for( int i=0; i < strlen( str ); i++ ){
+
+            // console[cursor] = str[i];
+
+            // if( ++lastline_len == CONSOLE_WIDTH )
+                // console[ ++cursor ] = '\n';
+
+            // if( lines == CONSOLE_HEIGHT ){
+                // strcpy( console, console+firstline_len+1 );
+                // lines--;
+                // cursor -= firstline_len+1;
+                // for( firstline_len = 0; console[firstline_len] != '\n'; firstline_len++ ); }
+
+            // if( console[cursor++] == '\n' ){
+                // lines ++;
+                // lastline_len = 0; } }
+
+        // console[cursor] = 0;
+		
+		// _console_lock_ = 0; }
+
+    // ------------------------------------------------------------------------------------------------------------ //
+	// ------------------------------------------ malloc ---------------------------------------------------------- //
+
+    void * getmem( size_t count ){
         void *p = malloc( count );
-        if( !p ){ MSGBOX( "Out of memory" ); exit(1); }
+        if( !p ){ MessageBox( GetActiveWindow(), "Out of memory", "Out of memory", MB_OK ); exit(1); };
+		memset( p, 0, count );
         return p; }
 
-    void *aligned_malloc(size_t bytes, size_t alignment) {
-        void *p1, *p2; p1 = getmem(bytes + alignment + sizeof(size_t));
+    void *aligned_malloc( size_t bytes, size_t alignment ) {
+        void *p1, *p2; p1 = getmem( bytes + alignment + sizeof(size_t) );
         size_t addr = (size_t)p1 +alignment +sizeof(size_t);
         p2 = (void *)(addr -(addr%alignment));
         *((size_t *)p2-1) = (size_t)p1;
         return p2; }
 
-    void aligned_free(void *p ){
+    void aligned_free( void *p ){
         free((void *)(*((size_t *) p-1))); }
 
+	// ------------------------------------------------------------------------------------------------------------ //
+	// ------------------------------------------ clock ----------------------------------------------------------- //
+
+	double clock_tick_in_samples;
+	int64_t clock_count_first;  // ??
+
+	void clock_init( int samplerate ){
+		int64_t freq;
+		QueryPerformanceFrequency( &freq );
+		clock_tick_in_samples = (double)samplerate / (double)freq;
+		QueryPerformanceCounter( &clock_count_first ); }
+
+	int64_t clock_time(){
+		int64_t count;
+		QueryPerformanceCounter( &count );
+		count -= clock_count_first;
+		return (int64_t)floor( ((double)count)*clock_tick_in_samples ); }
+
+	#define NOW clock_time()
+	
+	char* timestr( int seconds ){
+        static char str[30];
+        int h = seconds / 3600;
+        int m = seconds / 60 - h*60;
+        int s = seconds -h*3600 -m*60;
+        sprintf( str, "%.2d:%.2d:%.2d", h, m, s );
+        return str; }
+
     // ############################################################################################################ //
+	// ########################################## GLOBALS ######################################################### //
+	// ############################################################################################################ //
 
-    #define SAMPLESIZE sizeof(float)    
-    int samplerate = -1;
-    double T0;
-
-    #define NOW ((long)(ceil((PaUtil_GetTime()-T0)*samplerate))) // [samples]   
-     
-    #define POINTSMAX 1000  // should be even
-    #define POINTSMIN 20
-    #define DIFFSMAX 100
-    
-    #define MSIZE 250000 // keep 5 seconds
-
-    struct graph {
-        POINT points[POINTSMAX];
-        int full;
-        long cursor;
-        int min_i, max_i; };
+	// keep 3 seconds of audio (msize). 1 second max filter. 1 second max delay. 1 second left for buffersizes and correction headroom.
+	// repeat these 3 seconds 3 times in memory and use the middle one so memcopy does not care for boundaries.
+	// constantly measure both buffersizes (L) and cursor-to-end-of-input-buffer (G). should be equal.
+	// TODO: the print; dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot
+	
+	struct stat {
+		int64_t t;
+		int64_t avail; };
 
     struct port {
-        int channels_count;
-        PaStream *stream;
-        long t0, len;        
-        struct graph graph; }
+		int type;  // 0/1 - in/out
+		int stage;  // 0 -initial; 1 -200ms passed
+		int channels_count;
+        int64_t t0;
+		int64_t len;
+		struct stat *stats;  // now to end-of-data
+		int64_t min, max;
+		int stats_len;
+		PaStream *stream;
+		};
 
-    INPORT, OUTPORT;
-
-    long cursor;
-    
-    struct diff {
-        int mag;
-        long count;
-    }
-    
-    diffs[DIFFSMAX];
-    
-    int diffs_i;
-    int diffs_full;
-
-    float *canvas;
-    
     struct out {
-        int src_chan;
+        int src;
         __m256 *k;
-        int kn;
-    }
-    
-    *map;
+		int kn;
+		char *kname;
+		}; 
+	
+	int samplerate;
+	
+	int msize;  // 3 seconds
+	int ssize;  // max stats; samplerate*2 (ssize) so if frameCount == 1 and we stat before and after copy - we have 0.75s of stats.
+	
+    float *canvas;  // all inputs data
+	volatile struct out *map; // output channels to input channels
+	volatile struct port *ports;  // 0/1 - in/out
+	
+	volatile int64_t cursor;  // input lane read address in "stream-time"
+	
+	volatile float L;  // buffersizes
+	volatile struct stat *lstat;  
+	volatile int lstat_len;
 
-    int jobs_per_channel = 1;
+	volatile float G;  // cursor to end-of-data
+	volatile struct stat *gstat;  
+	volatile int gstat_len;
+	
+	volatile float dith_sig;  // cursor direction. samples per second. pos/neg. 
+	volatile int64_t dith_t;  // last correction time
+	volatile int64_t dith_p;  // correction period [samples]
+	
+	int jobs_per_channel; 
+	
+		
+    // ############################################################################################################ //
+	// ########################################## FILTERS ######################################################### //
 
-    // ####################### FILTERS ###############################################################################
-    // ####################### FILTERS ###############################################################################
-    // ####################### FILTERS ###############################################################################
-    
-    #define MAX_FILTER_LEN 131072
     #define ALIGNMENT 32
     
-    struct filter {
-        char *name;
-        float* k;
-        int kn;
-    }
-    
-    *filters[100]; // null terminated list of pointers
-    
-    struct filter * filter_p( char * name ){
-        for( int i=0; filters[i]; i++ )
-            if( strcmp( filters[i]->name, name ) == 0 )
-                return filters[i];
-        return 0; }
-
-    int filter_i( char * name ){
-        for( int i=0; filters[i]; i++ )
-            if( strcmp( filters[i]->name, name ) == 0 )
-                return i;
-        return -1; }
-
-    void load_filters(){
-        memset( filters, 0, sizeof(struct filter *) );
-        filters[0] = getmem( sizeof( struct filter ) );
-        filters[0]->name = "None";
-        filters[0]->k = getmem( SAMPLESIZE * 1 );
-        filters[0]->k[0] = 1.0;
-        filters[0]->kn = 1;        
-        WIN32_FIND_DATA r;
-        HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
-        int i = 1;
-        do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
-            char fname[100] = ""; sprintf( fname, "filters\\%s", r.cFileName );
-            FILE *f = fopen( fname, "r" );
-            if( !f ) continue;
-            int count = 0;
-            float num; while( fscanf( f, "%f", &num ) == 1 ) count ++;
-            if( count == 0 ) continue;
-            if( count > MAX_FILTER_LEN ){
-                PRINT( "NOT loaded %s exceeds %d taps \n", r.cFileName, MAX_FILTER_LEN );
-                continue; }
-            fseek( f, 0, SEEK_SET );
-            float *data = malloc( SAMPLESIZE * count );
-            for( int j=0; j<count; j++ )
-                fscanf( f, "%f", data +j );
-            PRINT( "loaded %s %d taps \n", r.cFileName, count );
-            fclose(f);
-            // push to list
-            filters[i] = getmem( sizeof( struct filter ) );
-            filters[i]->name = getmem( strlen( fname )+1 );
-            strcpy( filters[i]->name, r.cFileName );
-            filters[i]->k = data;
-            filters[i]->kn = count;
-            i++;
-        } while( FindNextFile( h, &r ) );
-        FindClose(h);
-        PRINT( "loaded %d filters \n", i-1 );
-    }
-
-    void set_filter( int out, struct filter * fl ){
-        if( map[out].k ) aligned_free( map[out].k );
-        map[out].kn = ( fl->kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
-        map[out].k = aligned_malloc( map[out].kn * SAMPLESIZE * 8, ALIGNMENT );
-        memset( map[out].k, 0, map[out].kn * SAMPLESIZE * 8 );
-        for(int i=0; i<fl->kn; i++) map[out].k[i] = _mm256_broadcast_ss( fl->k +fl->kn -i -1 );
+    void set_filter( int out, float *k, int kn, char *kname ){
+        if( map[out].k ) { aligned_free( map[out].k ); map[out].k = 0; }
+        map[out].kname = kname;
+		map[out].kn = ( kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
+		map[out].k = aligned_malloc( map[out].kn * sizeof(float) * 8, ALIGNMENT );
+        memset( map[out].k, 0, map[out].kn * sizeof(float) * 8 );
+        for(int i=0; i<kn; i++) map[out].k[i] = _mm256_broadcast_ss( k +kn -i -1 );
         }
 
     #define SSE_SIMD_LENGTH 4
@@ -182,83 +205,31 @@
             out[i] += in[i+k] * (*((float*)(kernel +kernel_length -k -1 ))); }
         return 0; }    
 
-    // ########################## THREADS ################################################
-    // ########################## THREADS ################################################
-    // ########################## THREADS ################################################
-
-    #define THREADSMAX 100
-
-    int threads_cores = 0;
-    int threads_count = 0;
-    int threads_shutdown = 0;
-
-    void get_cpu_cores(){        
-        typedef BOOL (WINAPI *LPFN_GLPI)( PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);        
-        LPFN_GLPI glpi = GetProcAddress( GetModuleHandle("kernel32"), "GetLogicalProcessorInformation");        
-        if( !glpi ) { threads_cores = 1; return; }
-        PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
-        DWORD returnLength = 0;        
-        glpi( buffer, &returnLength );
-        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) getmem( returnLength );
-        BOOL r = glpi( buffer, &returnLength );
-        if( !r ) { threads_cores = 1; return; }
-        ptr = buffer;
-        DWORD byteOffset = 0;
-        DWORD processorCoreCount = 0;
-        while( byteOffset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= returnLength ){
-            if( ptr->Relationship == RelationProcessorCore ) processorCoreCount++;
-            byteOffset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
-            ptr ++; }
-        threads_cores = processorCoreCount; }
-
-    void choose_threads_count(){
-        threads_count = threads_cores;
-        }
-
-    void threads_init(){
-        get_cpu_cores();
-        choose_threads_count();
-        threads_shutdown = 0; }
+    // ############################################################################################################ //
+	// ########################################## THREADS ######################################################### //
 
     struct thread {
-        volatile int status; // 0 done; 1 work; 2 emerging
+        int status;  // -1 stopped; 0 done/waiting; 1 work/working; 2 emerging job; 3 stop sig
+		// job:
         float *in;
         float *out;
         int len;
         __m256* k;
         int kn;
-    }
-    
-    threads[THREADSMAX];
+    };
 
-    void threads_body( struct thread *self ){
-        while( 1 ){
-            while( self->status != 1 )
-                if( threads_shutdown )
-                    return;
-            convolve(
-                self->in -self->kn+1, // * matlab
-                self->out,
-                self->len +self->kn-1, // * format
-                self->k,
-                self->kn
-                );
-            self->status = 0; } }
-
-    void threads_start(){
-        if( !threads_count ) threads_init();
-        memset( &threads, 0, sizeof( struct thread ) * threads_count );
-        for( int i; i<threads_count; i++ )
-            CreateThread( 0, 10000000, &threads_body, threads+i, 0, 0 ); }
-
-    void threads_stop(){
-        threads_shutdown = 1; }
-
-    int threads_done(){
-        for( int i=0; i<threads_count; i++ )
-            if( threads[i].status != 0 )
-                return 0;
-        return 1; }
+    struct thread threads[100];  // null terminated list of pointers
+    int threads_count = 0;
+	
+	void threads_wait(){
+		while(1){
+			int some_working = 0;
+			for( int i=0; i<threads_count; i++ )
+				if( threads[i].status > 0 ){
+					some_working = 1;
+					break; }
+			if( !some_working )
+				return; } }
 
     void threads_submit( float *in, float *out, int len, __m256 *k, int kn ){
         while( 1 )
@@ -271,128 +242,143 @@
                     threads[i].k = k;
                     threads[i].kn = kn;
                     threads[i].status = 1;
-                    return; } }
-    
-    // ####################### FILTERS ###############################################################################
-    // ####################### FILTERS ###############################################################################
-    // ####################### FILTERS ###############################################################################
+                    return; }
+					}
+					
+    void threads_body( volatile struct thread *self ){
+        while( 1 ){
+			self->status = 0;
+            while( self->status != 1 )  // wait to become == 1
+				if( self->status == 3 ){  // meanwhile check if stop sig
+					self->status = -1; return; }
+            convolve(
+                self->in -self->kn+1, // * matlab
+                self->out,
+                self->len +self->kn-1, // * format
+                self->k,
+                self->kn
+                );
+			}
+		 }
+
+    void threads_prepare( int count ){
+		static int initialized = 0;
+		if( !initialized ){
+			for( int i=0; i<100; i++ )
+				threads[i].status = -1;
+			initialized = 1;
+			threads_count = 0; }
+		for( int i=0; i<count; i++ )
+			if( threads[i].status == -1 )
+				CreateThread( 0, 10000000, &threads_body, threads+i, 0, 0 ); 
+		for( int i=count; i<threads_count; i++ )
+			threads[i].status = 3;
+        threads_count = count;
+		threads_wait(); }
 
 
-    void aftermath( int sel, long t, int avail_after, int frameCount ){
-        struct graph *g = ( sel == 0 ? &(INPORT.graph) : &(OUTPORT.graph) );
-        
-        // make a stat
-        g->points[g->cursor].x = t;
-        g->points[g->cursor].y = avail_after -frameCount; // avail before insert
-        g->cursor++;
-        
-        g->points[g->cursor].x = t;
-        g->points[g->cursor].y = avail_after;
-        g->cursor++;
-        
-        // graph end ?
-        if( g->cursor == POINTSMAX ){
-            g->cursor = 0;
-            if( g->full == 0 )
-                g->full = 1;
-        }
+    // ############################################################################################################ //
+	// ########################################## MAIN ############################################################ //
+	// ############################################################################################################ //
 
-        // find min/max
-        int pi = 0;
-        int gi = ( g->full ? g->cursor : 0 );
-        int count = ( g->full ? POINTSMAX : g->cursor );
-        int min = 999999;
-        int max = -999999;
-        for( int i=0; i<count; i++ ){
-            if( g->points[gi].y < min ){
-                min = g->points[gi].y;
-                g->min_i = gi;
-            }
-            if( g->points[gi].y > max ){
-                max = g->points[gi].y;
-                g->max_i = gi;
-            }
-            gi ++;
-            gi %= POINTSMAX;
-        }        
 
-        // cursor ?
-        if( (INPORT.graph.full || INPORT.graph.cursor > POINTSMIN) && (OUTPORT.graph.full || OUTPORT.graph.cursor > POINTSMIN) ){
-        
-            long new_cursor_candidate = 
-                OUTPORT.t0 -INPORT.t0 // output.t0 as input lane address
-                +OUTPORT.len // where is output end on the input
-                +INPORT.graph.points[INPORT.graph.min_i].y -OUTPORT.graph.points[OUTPORT.graph.max_i].y; // our latency
-                
-            if( new_cursor_candidate >= 0 ){
-            
-                if( cursor == -1 ){
-                    cursor = new_cursor_candidate;
-                    PRINT( "curosr initialized (%d) \n", cursor );
-                    
-                } else if( cursor - new_cursor_candidate != 0 ){
-                    // push a diff to think about
-                    long diff = cursor - new_cursor_candidate;
-                    if( diff == diffs[diffs_i].mag ){
-                        diffs[diffs_i].count ++;
-                    } else {
-                        diffs_i ++;
-                        if( diffs_i == DIFFSMAX ){
-                            diffs_i = 0;
-                            diffs_full = 1;
-                        }
-                        diffs[diffs_i].mag = diff;
-                        diffs[diffs_i].count = 1;
-                    }
-                }
-            }
-        }
-    }
+	void _makestat( volatile struct port * p ){
 
-    char* timestr(){
-        static char str[30];
-        long total = cursor / samplerate; // seconds
-        int h = total / 3600;
-        int m = total / 60 - h*60;
-        int s = total -h*3600 -m*60;
-        sprintf( str, "%.2d:%.2d:%.2d", h, m, s );
-        return str; }
+		int64_t now = NOW;
+		
+		if( p->stats_len == 0 )
+			p->t0 = now;
+		
+		// add stat
+		int i = p->stats_len % ssize;
+		p->stats[i].t = now;
+		p->stats[i].avail = p->t0 + p->len -now;  // now to end-of-data (available)
+		p->stats_len ++;
 
-    void correct_cursor_if_necessary(){
-        if( diffs_full || diffs_i > 0 ){
-            long diffs_sum = 0;
-            long diffs_total = 0;
-            int di = ( diffs_full ? diffs_i : 0 );
-            int count = ( diffs_full ? DIFFSMAX : diffs_i );
-            for( int i=0; i<count; i++ ){
-                diffs_sum += diffs[di].mag * diffs[di].count;
-                diffs_total += diffs[di].count;
-                di ++; di %= DIFFSMAX;
-            }
-            if( diffs_sum != 0 ){ // may cancel each other
-                double diffs_avg = ((double)diffs_sum)/((double)diffs_total);
-                if( diffs_avg > 0 )
-                    diffs_sum = (long)( floor( diffs_avg ) );
-                else
-                    diffs_sum = (long)( ceil( diffs_avg ) );
-                if( diffs_sum != 0 ){ // may round to zero
-                    cursor -= diffs_sum;
-                    PRINT( "[%s] correction of %d samples \n", timestr(), diffs_sum );
-                    diffs_full = diffs_i = 0;
-                }
-            }
-        }
-    }
+		if( now - p->t0 > samplerate/5 )  // 200ms
+			p->stage = 1;
 
-    PaStreamCallbackResult device_tick(
+		// update min/max
+		int64_t v, min = INT64_MAX; int64_t max = INT64_MIN;
+		for( int si = p->stats_len-1;
+			si >= 0 
+			&& p->stats[si%ssize].t > now-samplerate*3  // 3 sec
+			&& p->stats[si%ssize].t > p->t0 +samplerate/10  // skip first 100ms
+			;si-- ){  // upto 3sec
+			v = p->stats[si%ssize].avail;
+			if( v < min ) min = v;
+			if( v > max ) max = v; }
+		p->min = min;
+		p->max = max;
+		now = NOW;
+
+		if( ports[0].stage < 1 || ports[1].stage < 1 )
+			return;
+		
+		// calc L
+		int x = lstat_len;
+		lstat[x%ssize].t = now;
+		lstat[x%ssize].avail = (ports[0].max-ports[0].min) + (ports[1].max-ports[1].min);
+		lstat_len = ++x;
+		int64_t sum = 0, len = 0;
+		for( int si = x-1;
+			si >= 0 
+			&& lstat[si%ssize].t > now-samplerate*3 
+			//&& lstat[si%ssize].t > now -samplerate*3   // todo: skip first 100ms; make lstat_t0
+			; si-- ){  // upto 3sec
+			sum += lstat[si%ssize].avail;
+			len += 1; }
+		L = (float)sum / (float)len;
+		now = NOW;
+
+		if( cursor < 0 ){
+			
+			// set cursor
+			cursor = now -ports[0].t0 +ports[0].min -(int)(L*0.66); //-(ports[1].max -ports[1].min)*2;
+			dith_t = now;
+			if( cursor >= 0 ){
+				PRINT("%s init %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+		}
+	
+		else {
+
+			// calc G
+			int x = gstat_len;
+			gstat[x%ssize].t = now;
+			gstat[x%ssize].avail = ports[0].len -cursor;
+			gstat_len = ++x;
+			int64_t sum = 0, len = 0;
+			for( int si = x-1; si >= 0 && gstat[si%ssize].t > now-samplerate*3; si-- ){  // upto 3sec; todo: gstat_t0 skip 100ms
+				sum += gstat[si%ssize].avail;
+				len += 1; }
+			G = (float)sum / (float)len;
+			now = NOW;
+
+			// dith
+			dith_sig = (L-G) / 10.0 ;  // G to L for 10 seconds (speed)
+			dith_p = (int64_t)( (float)samplerate / ( dith_sig > 0.0 ? dith_sig : -dith_sig ) );
+			if( dith_t + dith_p < now ){
+				if( dith_sig < 0 ){
+					cursor += 1;
+					PRINT("%s corr +1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+				else {
+					cursor -= 1;
+					PRINT("%s corr -1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+				dith_t = now;
+			}
+
+		}
+
+	}
+		
+
+    PaStreamCallbackResult _tick(
         float **input,
         float **output,
         unsigned long frameCount,
         const PaStreamCallbackTimeInfo *timeInfo,
         PaStreamCallbackFlags statusFlags,
         void *userdata ){
-        
-        long now;
 
         if( statusFlags ){
             if( paInputUnderflow & statusFlags ) PRINT( "Input Underflow \n" );
@@ -400,98 +386,104 @@
             if( paOutputUnderflow & statusFlags ) PRINT( "Output Underflow \n" );
             if( paOutputOverflow & statusFlags ) PRINT( "Output Overflow \n" );
             if( paPrimingOutput & statusFlags ) PRINT( "Priming Output \n" );}
-        
-        if( input && output )
-            PRINT( "strange \n" );
 
         if( input ){
-        
+			
+			_makestat( ports );
+
             // write
-            int ofs = INPORT.len % MSIZE;
-            for( int i=0; i<INPORT.channels_count; i++ )
+            int ofs = ports[0].len % msize;
+            for( int i=0; i<ports[0].channels_count; i++ )
                 for( int j=0; j<3; j++ )
-                    memcpy( canvas +i*MSIZE*4 +j*MSIZE +ofs, input[i], frameCount*SAMPLESIZE );
-        
-            // stamp
-            now = NOW;
-            
-            if( INPORT.t0 == -1 )
-                INPORT.t0 = now;
+                    memcpy( canvas +i*msize*3 +j*msize +ofs, input[i], frameCount*sizeof(float) );
+				
+            ports[0].len += frameCount;			
+			_makestat( ports ); }
                 
-            // commit
-            INPORT.len += frameCount;
-            
-            // log
-            aftermath( 0, now, INPORT.t0 + INPORT.len -now, frameCount );
-        }
-        
-        if( output ){
+        if( output ){		
+		
+			_makestat( ports+1 );
+			
+			if( cursor < 0 )
+				for( int i=0; i<ports[1].channels_count; i++ )
+					memset( output[i], 0, frameCount*sizeof(float) );
+            else {
+				if( cursor + frameCount > ports[0].len ) PRINT( "GLITCH %d \r\n", cursor -ports[0].len );
+				if( cursor < ports[0].len -msize ) PRINT( "GLITCH %d \r\n", ports[0].len -msize -cursor );
+                // write
+                for( int i=0; i<ports[1].channels_count; i++ )
+					if( map[i].src == -1 )
+						memset( output[i], 0, frameCount*sizeof(float) );
+					else if( !map[i].k )
+						memcpy( output[i], canvas + map[i].src*msize*3 +msize + cursor%msize, frameCount*sizeof(float) );
+                    else {
+						int jlen = frameCount / jobs_per_channel;
+						int rem = frameCount % jobs_per_channel;                        
+						for( int j = 0; j<jobs_per_channel; j++ )
+							threads_submit(
+								canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen,
+								output[i] +j*jlen,
+								(j == jobs_per_channel-1) ? jlen+rem : jlen,
+								map[i].k,
+								map[i].kn ); 
+						threads_wait();
+						}
+				cursor += frameCount; }
 
-            if( cursor > -1 ){
-                // copy 
-                for( int i=0; i<OUTPORT.channels_count; i++ ){
-                    memset( output[i], 0, frameCount*SAMPLESIZE );
-                    if( map[i].src_chan == -1 )
-                        continue;
-                    int jlen = frameCount / jobs_per_channel;
-                    int rem = frameCount % jobs_per_channel;                        
-                    for( int j = 0; j<jobs_per_channel; j++ )
-                        threads_submit(
-                            canvas + map[i].src_chan*MSIZE*4 +MSIZE + cursor%MSIZE +j*jlen,
-                            output[i] +j*jlen,
-                            (j == jobs_per_channel-1) ? jlen+rem : jlen,
-                            map[i].k,
-                            map[i].kn
-                            );
-                }
-
-                while( !threads_done() );
-
-                if( cursor + frameCount > INPORT.len )
-                    PRINT( "glitch %d \n", cursor -INPORT.len );
-
-                cursor += frameCount;
-            }
-
-            // stamp
-            now = NOW;
-            
-            if( OUTPORT.t0 == -1 )
-                OUTPORT.t0 = now;
-
-            // commit
-            OUTPORT.len += frameCount;
-
-            // log
-            aftermath( 1, now, OUTPORT.t0 + OUTPORT.len -now, frameCount );
-        }
+            ports[1].len += frameCount;			
+            _makestat( ports+1 );
+			}
 
         return paContinue; }
 
 
-    int start( int input_device_id, int output_device_id ){
-        for( int i=1; i>-1; i-- ){
-            PRINT( "starting %s ... ", ( i ? "input" : "output" ) );
-        
-            int device_id = ( i ? input_device_id : output_device_id );
+	int init(){
+		if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
+        if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );        
+		samplerate = msize = ssize = canvas = ports = map = gstat = gstat_len = jobs_per_channel = 0;
+		cursor = -1; }
+
+    int start( int input_device_id, int output_device_id, int sr, int tc ){  // -> bool
+		int in = Pa_GetDeviceInfo( input_device_id )->maxInputChannels;
+		int on = Pa_GetDeviceInfo( output_device_id )->maxOutputChannels;
+		cursor = -1;
+		samplerate = sr;
+		msize = sr * 3;
+		ssize = sr * 2;
+		canvas = getmem( sizeof(float) * msize * 3 * in );
+		ports = getmem( sizeof(struct port) * 2 );
+		map = getmem( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) { map[i].src = -1; map[i].k = 0; }
+		lstat = getmem( sizeof(struct stat) * ssize ); lstat_len = 0;		
+		gstat = getmem( sizeof(struct stat) * ssize ); gstat_len = 0;		
+		ports[0].channels_count = in;
+		ports[0].stats = getmem( sizeof(struct stat) * ssize );
+		ports[1].type = 1;
+		ports[1].channels_count = on;
+		ports[1].stats = getmem( sizeof(struct stat) * ssize );
+		clock_init( sr );
+		threads_prepare( tc ); jobs_per_channel = (int)ceil( ((float)tc)/((float)on) );		
+        for( int i=0; i<2; i++ ){						
+            PRINT( "starting %s ... ", ( i==0 ? "input" : "output" ) );
+			 
+            int device_id = ( i==0 ? input_device_id : output_device_id );
             const PaDeviceInfo *device_info = Pa_GetDeviceInfo( device_id );
             static PaStreamParameters params;
-            PaStream **stream = ( i ? &(INPORT.stream) : &(OUTPORT.stream) );
+            PaStream **stream = &(ports[i].stream);
             
             params.device = device_id;
             params.sampleFormat = paFloat32|paNonInterleaved;
             params.hostApiSpecificStreamInfo = 0;            
-            params.suggestedLatency = ( i ? device_info->defaultLowInputLatency : device_info->defaultLowOutputLatency ); // "buffer size" [seconds]
-            params.channelCount = ( i ? device_info->maxInputChannels : device_info->maxOutputChannels );
+            params.suggestedLatency = ( i==0 ? device_info->defaultLowInputLatency : device_info->defaultLowOutputLatency );
+            params.channelCount = ( i==0 ? device_info->maxInputChannels : device_info->maxOutputChannels );
             
             PaError err = Pa_OpenStream(
                 stream,
-                i ? &params : 0,
-                i ? 0 : &params,
+                i==0 ? &params : 0,
+                i==0 ? 0 : &params,
                 samplerate,
                 paFramesPerBufferUnspecified,
                 paClipOff | paDitherOff | paPrimeOutputBuffersUsingStreamCallback, // paNeverDropInput is for full-duplex only
-                &device_tick,
+                &_tick,
                 0 );
 
             if( err != paNoError ){
@@ -502,47 +494,24 @@
                     const PaHostErrorInfo* herr = Pa_GetLastHostErrorInfo();
                     PRINT( "ERROR 2: %s \n", herr->errorText );
                     return 0; }}
-            
-            if( i ){
-                INPORT.channels_count = device_info->maxInputChannels;
-                PRINT( "%d channels, ", INPORT.channels_count );
-                canvas = getmem( INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
-                memset( canvas, 0, INPORT.channels_count * MSIZE*4 * SAMPLESIZE );
-            } else {
-                OUTPORT.channels_count = device_info->maxOutputChannels;
-                PRINT( "%d channels, ", OUTPORT.channels_count );
-                map = getmem( OUTPORT.channels_count * sizeof(struct out) );
-                memset( map, 0, OUTPORT.channels_count * sizeof(struct out) );
-                for( int i=0; i<OUTPORT.channels_count; i++ ){
-                    map[i].src_chan = -1;
-                    set_filter( i, filters[0] ); }
-                threads_start();
-                jobs_per_channel = (int)ceil(((float)threads_count)/((float)(OUTPORT.channels_count)));
-            }
-            
+			
             err = Pa_StartStream( *stream );
             if( err != paNoError ){
                 PRINT( "ERROR 3: %s \n", Pa_GetErrorText( err ) );
                 return 0; }
 
-            PaStreamInfo *stream_info = Pa_GetStreamInfo( *stream );            
-            PRINT( "%d samples buffersize\n",
-                (int)round( i ? (stream_info->inputLatency)*samplerate : (stream_info->outputLatency)*samplerate ) ); }
+			PRINT( "ok \r\n" );
+
+            }
 
         // done
         return 1; }
 
     // ############################################################################################################ //
+    // ########################################## GUI ############################################################# //
     // ############################################################################################################ //
-    // ############################################################################################################ //
-
-    const int width = 600;
-    const int height = 700;
-    const int WW = 574, HH = 200;
 
     HWND hwnd;
-    HDC hdc;    
-    RECT rc;
     MSG msg;
 
     #define R1 (1)
@@ -567,8 +536,10 @@
 
     LOGFONT font1 = {0}, font2 = {0}, font3 = {0};
     HFONT hfont1, hfont2, hfont3;
-
-    void PRINT( char *format, ... ){
+	
+	// ------------------------------------------------------------------------------------------------------------ //
+	
+    void PRINT( char *format, ... ){ // SendMessage blocks the audio thread for very long
         char str[1000] = "";
         va_list( args );
         va_start( args, format );
@@ -579,21 +550,16 @@
         int index = GetWindowTextLength( hEdit );
         SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // select from end to end
         SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); }
-    
-    void MSGBOX( char *format, ... ){
-        char str[1000] = "";
-        va_list( args );
-        va_start( args, format );
-        vsprintf( str, format, args );
-        va_end( args );
-        MessageBox( 0, str, "Message", MB_OK ); }
 
-    void CALLBACK every_second( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-        correct_cursor_if_necessary();
-        if( cursor > 0 ){
-            char txt[50];
-            sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(INPORT.stream)+Pa_GetStreamCpuLoad(OUTPORT.stream))*200.0) ); // 50% == 100%
+	// ------------------------------------------------------------------------------------------------------------ //
+
+    void CALLBACK every_20ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+		//SetWindowText( hEdit, console );
+        if( cursor > -1 ){
+            char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*200.0) ); // 50% == 100%
             SetWindowText( hLL, txt ); } }
+
+	// ------------------------------------------------------------------------------------------------------------ //
 
     char * names = 0;
     char * device_name( int device_id ){
@@ -612,16 +578,89 @@
             if( strcmp( names +i*200, device_name ) == 0 )
                 return i;
         return -1; }
+
+	// ------------------------------------------------------------------------------------------------------------ //
+
+    struct filter {
+        char *name;
+        float* k;
+        int kn; 
+    };
     
-    void fill_left_combos( int count ){
-        char n[3];
+    struct filter ** filters = 0; // null terminated list of pointers
+    
+    struct filter * filter_p( char * name ){
+        for( int i=0; filters[i]; i++ )
+            if( strcmp( filters[i]->name, name ) == 0 )
+                return filters[i];
+        return 0; }
+
+    int filter_i( char * name ){
+        for( int i=0; filters[i]; i++ )
+            if( strcmp( filters[i]->name, name ) == 0 )
+                return i;
+        return -1; }
+
+    void load_filters( int max_len ){  // TODO: open one file only; rm FindFirstFile(); load_filter(i, filename, max_len)
+		if( filters ){
+			for( int i=0; filters[i]; i++ ){
+				free( filters[i]->name );
+				free( filters[i]->k ); }
+			free( filters ); filters = 0; }
+		filters = getmem( sizeof(struct filter *) * 100 );
+        filters[0] = getmem( sizeof( struct filter ) );
+		filters[0]->name = getmem( 5 ); strcpy( filters[0]->name, "None" );
+        filters[0]->k = getmem( sizeof(float) * 1 );
+        filters[0]->k[0] = 1.0;
+        filters[0]->kn = 1;        
+        WIN32_FIND_DATA r;
+        HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
+        int i = 0;
+        do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
+            char fname[100] = ""; sprintf( fname, "filters\\%s", r.cFileName );
+            FILE *f = fopen( fname, "r" );
+            if( !f ) continue;
+            int count = 0;
+            float num; while( fscanf( f, "%f", &num ) == 1 ) count ++;
+            if( count == 0 ) continue;
+            if( count > max_len ){
+                PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, max_len );
+                continue; }
+            fseek( f, 0, SEEK_SET );
+            float *data = malloc( sizeof(float) * count );
+            for( int j=0; j<count; j++ )
+                fscanf( f, "%f", data +j );
+            fclose(f);
+            // push to list
+            filters[i] = getmem( sizeof( struct filter ) );
+            filters[i]->name = getmem( strlen( fname )+1 );
+            strcpy( filters[i]->name, r.cFileName );
+            filters[i]->k = data;
+            filters[i]->kn = count;
+            i++;
+        } while( FindNextFile( h, &r ) );
+        FindClose(h);
+        PRINT( "loaded %d filters \r\n", i-1 );
+    }
+
+	// ------------------------------------------------------------------------------------------------------------ //
+
+    void fill_left_combos(){
+		char txt[250];
+		GetDlgItemText( hwnd, CMB1, txt, 250 );
         for( int i=0; i<10; i++ ){
             SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
             SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"None" );
             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            for( int j=0; j<count; j++ ){
-                sprintf( n, "%d", j+1 );
+            for( int j=0; j<Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels; j++ ){
+				char n[3]; sprintf( n, "%d", j+1 );
                 SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } } }
+
+	void fill_right_combos(){
+		for( int i=0; i<10; i++ ){
+			SendMessage( cbs2[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+			for( int j=0; filters[j]; j++ ) SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j]->name );
+			SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
 
     int devices_as_in_conf(){ // whether the two devices selected are as in the conf
         char a[250], b[250];
@@ -669,18 +708,39 @@
             conf_set( key, txt ); }
         conf_save(); }
 
+    int get_cpu_cores(){
+        typedef BOOL (WINAPI *LPFN_GLPI)( PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);        
+        LPFN_GLPI glpi = GetProcAddress( GetModuleHandle("kernel32"), "GetLogicalProcessorInformation");        
+        if( !glpi ) { return 1; } // winxp?
+        PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
+        DWORD returnLength = 0;
+        glpi( buffer, &returnLength );
+        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) getmem( returnLength );
+        BOOL r = glpi( buffer, &returnLength );
+        if( !r ) { return 1; } // ???
+        ptr = buffer;
+        DWORD byteOffset = 0;
+        int processorCoreCount = 0;
+        while( byteOffset + sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION) <= returnLength ){
+            if( ptr->Relationship == RelationProcessorCore ) processorCoreCount++;
+            byteOffset += sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+            ptr ++; }
+        return processorCoreCount; }
+
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
 
-            if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){
-                switch( LOWORD(wParam) ){
+            if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){  // samplerate changed
+
+				switch( LOWORD(wParam) ){
                     case R1: samplerate = 44100; break;
                     case R2: samplerate = 48000; break;
                     case R3: samplerate = 96000; break;
                     case R4: samplerate = 192000; }
-                    show_conf();
+					
+				load_filters( samplerate );
 
-            } else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){
+            } else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){  //  config device clicked
                 char txt[250];
                 GetDlgItemText( hwnd, LOWORD(wParam) == BTN01 ? CMB1 : CMB2, txt, 250 );
                 if( strstr( Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id( txt ) )->hostApi )->name, "ASIO" ) != 0 ){
@@ -695,25 +755,18 @@
                     strcat( cmd, (LOWORD(wParam) == BTN01) ? "1" : "0" );
                     CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
-            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){
-                char txt[250];
-                GetDlgItemText( hwnd, CMB1, txt, 250 );
-                fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
-                show_conf();
+            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
 
-            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){
-                char txt[250];
-                GetDlgItemText( hwnd, CMB2, txt, 250 );
-                show_conf();
+            } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){  // device 2 changed
                 
-            } else if( LOWORD(wParam) == BTN1 ){
+            } else if( LOWORD(wParam) == BTN1 ){  // play clicked
                 int sd, dd;
                 char txt[250];
                 GetDlgItemText( hwnd, CMB1, txt, 250 );
                 sd = device_id( txt );
                 GetDlgItemText( hwnd, CMB2, txt, 250 );
                 dd = device_id( txt );
-                if( start( sd, dd ) ){                                   // START
+                if( start( sd, dd, samplerate, get_cpu_cores() ) ){                                   // START
                     EnableWindow( hr1, 0 );
                     EnableWindow( hr2, 0 );
                     EnableWindow( hr3, 0 );
@@ -723,21 +776,25 @@
                     EnableWindow( hCombo1, 0 );
                     EnableWindow( hCombo2, 0 );
                     EnableWindow( hBtn, 0 );
-                    for( int i=0; i<OUTPORT.channels_count; i++ ){
+					fill_left_combos();
+					fill_right_combos();
+					show_conf();
+                    for( int i=0; i<ports[1].channels_count; i++ ){
                         if( i < 10 ){
                             EnableWindow( cbs[i], 1 );
-                            for( int j=0; j<INPORT.channels_count; j++ ){
+                            for( int j=0; j<ports[0].channels_count; j++ ){
                                 char key[6]; int val;
                                 sprintf( key, "out%d", i+1 );
                                 if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
-                                    map[i].src_chan = val-1;
+                                    map[i].src = val-1;
                                 sprintf( key, "filter%d", i+1 );
                                 if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
-                                    set_filter( i, filter_p( conf_get( key ) ) );
+									struct filter *fl = filter_p( conf_get( key ) );
+                                    set_filter( i, fl->k, fl->kn, fl->name );
                                     SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 ); } }
-                            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src_chan+1, (LPARAM)0 );
+                            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
                             EnableWindow( cbs2[i], 1 ); } }
-                    SetTimer( 0, 0, 1000, (TIMERPROC) &every_second ); }
+                    }
 
             } else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){
                 int out = LOWORD(wParam) - CB1;                
@@ -745,19 +802,19 @@
                 GetDlgItemText( hwnd, CB1+out, txt, 20 );                
                 int chan = txt[0]-48-1;
                 if( chan < 10 ) {
-                    map[out].src_chan = chan;
-                    PRINT( "mapped out %d to in %d\n", out+1, chan+1 ); }
+                    map[out].src = chan;
+                    PRINT( "mapped out %d to in %d \r\n", out+1, chan+1 ); }
                 else {
-                    map[out].src_chan = -1;
-                    PRINT( "muted out %d \n", out+1 ); }
+                    map[out].src = -1;
+                    PRINT( "muted out %d \r\n", out+1 ); }
                 
             } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){                
                 int out = LOWORD(wParam) - CB2;                
                 char  txt[100];
                 GetDlgItemText( hwnd, CB2+out, txt, 100 );
                 struct filter *fl = filter_p( txt );
-                set_filter( out, fl );                
-                PRINT( "mapped out %d to filter %s \n", out+1, txt );                
+                set_filter( out, fl->k, fl->kn, fl->name );            
+                PRINT( "mapped out %d to filter %s \r\n", out+1, txt );                
             }
         }
 
@@ -766,15 +823,124 @@
             DestroyWindow( hwnd ); }
 
         else if( msg == WM_DESTROY ){
-            threads_stop();
             PostQuitMessage( 0 ); }
 
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
 
+	// ---------------------------- draw ------------------------------------------------------
+	HDC hdc, hdcMem;
+	RECT rc;
+	HBITMAP hbmp;
+	void ** pixels;
+    int VPw = 40000;        // ViewPort width
+    int VPh = 2500;        // ViewPort height
+    int VPx = 0;           // ViewPort pos x corner
+    int VPy = 0;           // ViewPort pos y corner
+	POINT points[192000*2];
+	void draw_prepare(){
+        BITMAPINFO bmi;
+        memset( &bmi, 0, sizeof(bmi) );
+        bmi.bmiHeader.biSize = sizeof(bmi);
+        bmi.bmiHeader.biWidth = 200;
+        bmi.bmiHeader.biHeight =  -200;         // Order pixels from top to bottom
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;             // last byte not used, 32 bit for alignment
+        bmi.bmiHeader.biCompression = BI_RGB;
+        hdc = GetDC( hwnd );
+        hbmp = CreateDIBSection( hdc, &bmi, DIB_RGB_COLORS, &pixels, 0, 0 );
+        hdcMem = CreateCompatibleDC( hdc );
+        SelectObject( hdcMem, hbmp );
+        SetBkMode( hdcMem, TRANSPARENT ); }
+    void transform_point( POINT *p ){
+		double Qw = ((double)200)/((double)VPw);
+        double Qh = ((double)200)/((double)VPh);        
+        p->x = (long)round( (p->x - VPx) * Qw );
+        p->y = (long)round( (p->y - VPy) * Qh );
+        p->y = 200 - p->y; }
+    void place_marker( int val, COLORREF c ){
+		POINT p1 = { VPx, val };
+		POINT p2 = { VPx+VPw, val };
+		transform_point( &p1 );
+		transform_point( &p2 );
+		MoveToEx( hdcMem, p1.x, p1.y, 0 );
+		SetDCPenColor(hdcMem, c);
+		LineTo( hdcMem, p2.x, p2.y ); }
+	void draw(){
+		memset( pixels, 192, 200*200*4 );
+		SelectObject( hdcMem, GetStockObject(DC_PEN) );		
+		if( ports && ports[0].stats_len && ports[1].stats_len ){
+
+			int now = NOW;
+			
+			// move view
+			///*
+			if( now + 1000 > ports[0].t0 + VPw ){  // look 1000 samples in future
+				VPx = now + 1000 - VPw; }
+			else { VPx = now - VPw; }			
+			//*/
+			
+			// draw 2 plylines
+			for( int i=0; i<2; i++ ){
+				
+				int bias = (i==0 ? -ports[0].min +(ports[1].max-ports[1].min) : -ports[1].min );
+				
+				if( ports[i].stats_len ){
+					SetDCPenColor(hdcMem, RGB( 199-i*199, i*66 ,0 ) );
+					int pi=0;
+					for( int si=ports[i].stats_len-1; si>=0; si-- ) {
+						points[pi].x = ports[i].stats[si%ssize].t;
+						points[pi].y = ports[i].stats[si%ssize].avail + bias;
+						transform_point( points+pi );
+						if( points[pi].x < 0 ) break;
+						pi ++; }
+					Polyline( hdcMem, points, pi );				
+				}
+
+				// and 2 lines
+				//place_marker( ports[0].min+bias, RGB(255, 0,0) );
+				//place_marker( ports[1].max+bias, RGB(0, 99, 0) );
+
+			}
+		}
+
+		if( gstat_len ){
+			SetDCPenColor(hdcMem, RGB(0,0,99));
+			int pi=0;
+			for( int i=gstat_len-1; i>0; i-- ) {
+				points[pi].x = gstat[i%ssize].t;
+				points[pi].y = gstat[i%ssize].avail;
+				transform_point( points+pi );
+				if( points[pi].x < 0 ) break;
+				pi ++; }
+			Polyline( hdcMem, points, pi );
+			place_marker( G, RGB(255,255,00) );
+		}
+		if( lstat_len ){
+			//place_marker( L, RGB(250,50,255) );
+			SetDCPenColor( hdcMem, RGB(255,255,255));
+			int pi=0;
+			for( int i=lstat_len-1; i>0; i-- ) {
+				points[pi].x = lstat[i%ssize].t;
+				points[pi].y = lstat[i%ssize].avail;
+				transform_point( points+pi );
+				if( points[pi].x < 0 ) break;
+				pi ++; }			
+			Polyline( hdcMem, points, pi );
+			
+		}
+		place_marker( 0, RGB(0,0,0) );
+		MoveToEx( hdcMem, 0, 0, 0 );
+		SetDCPenColor(hdcMem, RGB(0,0,0));
+		LineTo( hdcMem, 199, 0 ); LineTo( hdcMem, 199, 199 );
+		LineTo( hdcMem, 0, 199 ); LineTo( hdcMem, 0, 0 );
+		BitBlt( hdc, 364, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
+	}
+	// ----------------------------------------------------------------------------------
+	
 
     int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
-        
-        // UI
+
+		// window class
         WNDCLASSEX wc;
         memset( &wc, 0, sizeof(wc) );
         wc.cbSize = sizeof(wc);
@@ -784,37 +950,35 @@
         wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
         wc.hCursor = LoadCursor( 0, IDC_ARROW );
         wc.hIcon = LoadIcon(hInstance, "main.ico");
-        if( !RegisterClassEx(&wc) ){ MessageBox( 0, "Failed to register window class.", "Error", MB_OK ); return 1; }
-        hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", title, WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, width, height, 0, 0, hInstance, 0 );
-        hdc = GetDC( hwnd );
-        
+        RegisterClassEx(&wc);
+		
+		// fonts
+        strcpy(font1.lfFaceName, "Wingdings");
+        font1.lfCharSet = DEFAULT_CHARSET;
+        hfont1 = CreateFontIndirect(&font1);
+        strcpy(font2.lfFaceName, "Tahoma");
+        font2.lfCharSet = DEFAULT_CHARSET;
+        font2.lfHeight = 16;            
+        hfont2 = CreateFontIndirect(&font2);
+        strcpy(font3.lfFaceName, "Tahoma");
+        font3.lfCharSet = DEFAULT_CHARSET;
+        font3.lfHeight = 18;
+        hfont3 = CreateFontIndirect(&font3);        
+
+		// create
+		hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );        
         hr1 = CreateWindowEx( 0, "Button", "44.1k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON|WS_GROUP, 70, 10, 50, 23, hwnd, R1, 0, 0);
         hr2 = CreateWindowEx( 0, "Button", "48k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 160, 10, 50, 23, hwnd, R2, 0, 0);
         hr3 = CreateWindowEx( 0, "Button", "96k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 230, 10, 50, 23, hwnd, R3, 0, 0);
         hr4 = CreateWindowEx( 0, "Button", "192k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 300, 10, 50, 23, hwnd, R4, 0, 0);
-        hLL = CreateWindowEx( 0, "static", "", WS_VISIBLE|WS_CHILD, 410, 13, 80, 15, hwnd, LL, NULL, NULL);
-        SendMessage(hr2, BM_SETCHECK, BST_CHECKED, 0);
+        hLL = CreateWindowEx( 0, "static", "", WS_VISIBLE|WS_CHILD, 410, 13, 80, 15, hwnd, LL, NULL, NULL);        
         hbctl1 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 40, 30, 23, hwnd, BTN01, NULL, NULL);
         hbctl2 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 70, 30, 23, hwnd, BTN02, NULL, NULL);
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
-        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, WW, HH, hwnd, EDT, NULL, NULL);
+        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, 574, 200, hwnd, EDT, NULL, NULL);
 
-        strcpy(font1.lfFaceName, "Wingdings");
-        font1.lfCharSet = DEFAULT_CHARSET;
-        hfont1 = CreateFontIndirect(&font1);
-
-        strcpy(font2.lfFaceName, "Tahoma");
-        font2.lfCharSet = DEFAULT_CHARSET;
-        font2.lfHeight = 16;            
-        hfont2 = CreateFontIndirect(&font2);
-
-        strcpy(font3.lfFaceName, "Tahoma");
-        font3.lfCharSet = DEFAULT_CHARSET;
-        font3.lfHeight = 18;
-        hfont3 = CreateFontIndirect(&font3);
-        
         SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hr3, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -827,38 +991,6 @@
         SendMessageA( hBtn, WM_SETFONT, (WPARAM)hfont3, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 
-        // init core
-        if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
-        if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );
-        PaUtil_InitializeClock();
-        T0 = PaUtil_GetTime();
-        conf_load( "RTFIR.conf" );
-        threads_init();
-        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\n" );
-        PRINT( "max filter length %d taps \n", MAX_FILTER_LEN );
-
-        // globals
-        samplerate = 48000;
-        struct port* ports [2] = { &INPORT, &OUTPORT };
-        for( int i=0; i<2; i++ ){
-            struct port *p = ports[i];
-            memset( p, 0, sizeof(struct port) );
-            memset( p, 0, sizeof(struct port) );
-            p->t0 = -1; // invalid
-            p->len = 0;
-            p->graph.cursor = 0;
-            p->graph.full = 0;
-            p->graph.min_i = -1; // invalid
-            p->graph.max_i = -1; // invalid
-            }
-        cursor = -1; // invalid
-        diffs_full = 0;
-        diffs_i = 0;
-
-        // load filters
-        load_filters();
-
-        // add map labels and dropdowns
         for( int i=0; i<10; i++ ){        
             char str[7]; HANDLE h;
             sprintf( str, "out %d", i+1 );
@@ -871,23 +1003,14 @@
             SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 260, 130+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);
             SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-            int j=0;
-            while( filters[j] )
-                SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j++]->name );
-            SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            EnableWindow( cbs2[i], 0 ); }
-        
-        // SHOW
-        ShowWindow( hwnd, SW_SHOW );
+			EnableWindow( cbs2[i], 0 ); }
 
-        // samplerate ?
-        int samplerate_from_conf = -1;
-        if( conf_get( "samplerate" ) && sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 ){
-            switch( samplerate_from_conf ){
-                case 44100: SendMessage( hr1, BM_CLICK, 0, 0 ); break;
-                case 48000: SendMessage( hr2, BM_CLICK, 0, 0 ); break;
-                case 96000: SendMessage( hr3, BM_CLICK, 0, 0 ); break;
-                case 192000: SendMessage( hr4, BM_CLICK, 0, 0 ); } }
+        ShowWindow( hwnd, SW_SHOW );
+		
+		// init		
+		PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
+		init();
+		conf_load( "RTFIR.conf" );
 
         // populate device dropdowns
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
@@ -905,15 +1028,31 @@
         if( SendMessage( hCombo2, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
 
-        char txt[250];
-        GetDlgItemText( hwnd, CMB1, txt, 250 );
-        fill_left_combos( Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels );
-
-        show_conf();
+		// populate samplerate radios
+        int samplerate_from_conf = -1;
+        if( conf_get( "samplerate" ) && sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 ){
+            switch( samplerate_from_conf ){
+                case 44100: SendMessage( hr1, BM_CLICK, 0, 0 ); break;
+                case 48000: SendMessage( hr2, BM_CLICK, 0, 0 ); break;
+                case 96000: SendMessage( hr3, BM_CLICK, 0, 0 ); break;
+                case 192000: SendMessage( hr4, BM_CLICK, 0, 0 ); }
+		} else SendMessage( hr1, BM_CLICK, 0, 0 );
+		
+		SetTimer( 0, 0, 20, (TIMERPROC) &every_20ms );
 
         // loop
-        while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
-            TranslateMessage( &msg );
-            DispatchMessage( &msg ); }
+        // while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
+            // TranslateMessage( &msg );
+            // DispatchMessage( &msg ); }
+
+		draw_prepare();
+
+		int done = 0;
+        while( !done ){
+            if( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) ){
+                if( msg.message == WM_QUIT ) done = 1;
+                else { TranslateMessage( &msg ); DispatchMessage( &msg ); } }
+            draw();
+        }
 
 	return msg.wParam; }
