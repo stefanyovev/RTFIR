@@ -1,11 +1,12 @@
 
 
 	#include <stdio.h>
+	#include <stdlib.h>
 	#include <string.h>
-	#include <stdint.h>
 
-
-	// purpuse in life - fast / thread-safe / non-blocking
+	// the print function
+	
+	// fast / thread-safe / non-blocking
 	// prints to memory / exposes an alwayss valid string for reading / may mix content but not crash or block
 	
 	// init() first
@@ -14,9 +15,10 @@
 	
 	// data len = width*height + place for endbyte + the maximum count of newlines we may put to wrap (height-1)
 
-	// tests for 3x3
-	#define CONSOLE_WIDTH 3
-	#define CONSOLE_HEIGHT 3
+	// tests are for 3x3
+	
+	#define CONSOLE_WIDTH 80
+	#define CONSOLE_HEIGHT 12
 	#define CONSOLE_SIZE (CONSOLE_WIDTH*CONSOLE_HEIGHT)
 
 	volatile char volatile *console;
@@ -73,24 +75,24 @@
 		if( inlen <= 0 )  // error during formatting (<0) or too much input (==0)
 			return;  // give up
 		
-		// expand newlines  (wrap)
-		int i=0, j=0;
-		for( ; i<inlen && j<CONSOLE_SIZE +CONSOLE_HEIGHT; i++ ){
+		// expand newlines
+		int j=0;
+		for( int i=0; i<inlen; i++ ){
+			
+			if( console_lll == CONSOLE_WIDTH && console_tmp1[i] != '\n' ){
+				console_tmp2[j++] = '\n';
+				console_lll = 0;
+				console_len ++;
+				}
 			
 			console_tmp2[j++] = console_tmp1[i];
-			console_len ++;
-			
+
 			if( console_tmp1[i] == '\n' )
 				console_lll = 0;
 			else
 				console_lll ++;
 			
-			if( console_lll == CONSOLE_WIDTH && j<CONSOLE_SIZE-1 ){
-				console_tmp2[j++] = '\n';
-				console_len ++;
-				console_lll = 0;
-				}
-				
+			console_len ++;
 		}			
 		//printf( "%d %d", inlen, j ); exit(1);
 		inlen = j; 
@@ -120,7 +122,7 @@
 		int lines = 1;
 		int ofs = CONSOLE_SIZE+CONSOLE_HEIGHT-1;		
 		
-		for( ; ofs > 0 && ofs >CONSOLE_SIZE+CONSOLE_HEIGHT-1 -console_len ; ofs-- ){
+		for( ; ofs >= 0 && ofs >CONSOLE_SIZE+CONSOLE_HEIGHT-1 -console_len ; ofs-- ){
 			
 			if( console_data[ofs] == '\n' ){
 				
@@ -145,31 +147,30 @@
 		}
 
 
+	// -----------------------------------------------------------------------------------------------
+	/*
 	#define PRINT console_print
-	// ----------------------------
-
-
 
 	int main( int argc, char **argv ){
+		
 		console_init();
 		
 		PRINT("AAABBBCCC");
-		//PRINT("AA\nBB\nCCC");
+		PRINT("AA\nBB\nCCC");
 		PRINT("??");
-		//PRINT("a\n");
-		//PRINT("ab\n");
-		//PRINT("\n");
-		//PRINT("1231231223");
-		//PRINT("AB");
-		//PRINT("AB\npp");
+		PRINT("a\n");
+		PRINT("ab\n");
+		PRINT("\n");
+		PRINT("123123123");
+		PRINT("AB");
+		PRINT("AB\npp");
 		
 		printf("--- console ---\n%s\n--- /console --- \n", console );
 
-		
-		
 		//char b [4] = { 0,1,2,3 };
 		//printf( "%x %x %x %x \n", b[0], b[1], b[2], b[3] );
 		//snprintf( b, 3, "AAAA" );
 		//printf( "%x %x %x %x \n", b[0], b[1], b[2], b[3] );
 	}
+	*/
 	
