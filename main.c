@@ -8,55 +8,10 @@
     #include <windows.h>    
 	#include "portaudio.h"
 	
-    #include "conf.c"
-
-    // ------------------------------------------------------------------------------------------------------------ //
-	// ------------------------------------------ print ----------------------------------------------------------- //
-
-	void PRINT( char *format, ... );
-
-    // #define CONSOLE_WIDTH 80
-    // #define CONSOLE_HEIGHT 12
-
-    // volatile char console [ (CONSOLE_WIDTH+1)*CONSOLE_HEIGHT + 1] = "";
-    // volatile int _console_lock_ = 0;
-
-    // void PRINT ( char *format, ... ) {
-
-        // static int cursor = 0, lines = 1;
-        // static int firstline_len = 0, lastline_len = 0;
-
-        // char str[1000] = "";
-        // va_list( args );
-        // va_start( args, format );
-        // vsprintf( str, format, args );
-        // va_end( args );
-        // if( str[0] == 0 )
-            // return;
-
-        // while( _console_lock_ == 1 );
-        // _console_lock_ = 1;
-
-        // for( int i=0; i < strlen( str ); i++ ){
-
-            // console[cursor] = str[i];
-
-            // if( ++lastline_len == CONSOLE_WIDTH )
-                // console[ ++cursor ] = '\n';
-
-            // if( lines == CONSOLE_HEIGHT ){
-                // strcpy( console, console+firstline_len+1 );
-                // lines--;
-                // cursor -= firstline_len+1;
-                // for( firstline_len = 0; console[firstline_len] != '\n'; firstline_len++ ); }
-
-            // if( console[cursor++] == '\n' ){
-                // lines ++;
-                // lastline_len = 0; } }
-
-        // console[cursor] = 0;
-		
-		// _console_lock_ = 0; }
+	#include "..\conf.c"
+    #include "..\console.c"
+	
+	#define PRINT console_print
 
     // ------------------------------------------------------------------------------------------------------------ //
 	// ------------------------------------------ malloc ---------------------------------------------------------- //
@@ -535,26 +490,12 @@
     HWND hEdit;
 
     LOGFONT font1 = {0}, font2 = {0}, font3 = {0};
-    HFONT hfont1, hfont2, hfont3;
-	
-	// ------------------------------------------------------------------------------------------------------------ //
-	
-    void PRINT( char *format, ... ){ // SendMessage blocks the audio thread for very long
-        char str[1000] = "";
-        va_list( args );
-        va_start( args, format );
-        vsprintf( str, format, args );
-        va_end( args );
-        if( str[0] == 0 )
-            return;
-        int index = GetWindowTextLength( hEdit );
-        SendMessageA( hEdit, EM_SETSEL, (WPARAM)index, (LPARAM)index ); // select from end to end
-        SendMessageA( hEdit, EM_REPLACESEL, 0, (LPARAM)str ); }
+    HFONT hfont1, hfont2, hfont3;	
 
 	// ------------------------------------------------------------------------------------------------------------ //
 
     void CALLBACK every_20ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		//SetWindowText( hEdit, console );
+		SetWindowText( hEdit, console );
         if( cursor > -1 ){
             char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*200.0) ); // 50% == 100%
             SetWindowText( hLL, txt ); } }
@@ -1007,7 +948,8 @@
 
         ShowWindow( hwnd, SW_SHOW );
 		
-		// init		
+		// init
+		console_init();
 		PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
 		init();
 		conf_load( "RTFIR.conf" );
