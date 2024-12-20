@@ -17,7 +17,7 @@ jobs:
       with: 
         msystem: mingw64
         install: >-
-          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-x86_64-toolchain
           cmake
           make
     - uses: actions/checkout@v4
@@ -27,7 +27,7 @@ jobs:
       run: cmake .
 
     - name: Build
-      run: ./build.sh
+      run: cmake --build .
 
     - name: Archive
       uses: actions/upload-artifact@v4
