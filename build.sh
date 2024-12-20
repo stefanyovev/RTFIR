@@ -12,6 +12,7 @@ fi
 
 cp -rf main.c portaudio
 cp -rf conf.c portaudio
+cp -rf console.c portaudio
 cp -rf main.ico portaudio
 cp -rf main.rc portaudio
 
@@ -20,7 +21,7 @@ if [ ! -f cache/CMakeLists_changed ]; then
     echo "
     add_compile_options(-std=c99 -march=native -O3 -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w)
     add_executable(RTFIR main.c main.rc)
-    target_link_libraries(RTFIR PortAudio gdi32 stdc++ -mwindows -static)
+    target_link_libraries(RTFIR PortAudio libsynchronization.a gdi32 stdc++ -mwindows -static)
     " >> portaudio/CMakeLists.txt
     touch cache/CMakeLists_changed
 fi
