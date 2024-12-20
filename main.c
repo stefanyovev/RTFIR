@@ -565,7 +565,7 @@
         filters[0]->kn = 1;        
         WIN32_FIND_DATA r;
         HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
-        int i = 0;
+        int i = 1;
         do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
             char fname[100] = ""; sprintf( fname, "filters\\%s", r.cFileName );
             FILE *f = fopen( fname, "r" );
