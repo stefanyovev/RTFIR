@@ -1,17 +1,17 @@
 
     #include <stdio.h>
     #include <stdlib.h>
-	#include <stdint.h>
+    #include <stdint.h>
     #include <string.h>
     #include <math.h>
-	#include <immintrin.h>	
+    #include <immintrin.h>	
     #include <windows.h>    
-	#include "portaudio.h"
-	
-	#include "..\conf.c"
-    #include "..\console.c"
-	
-	#define PRINT console_print
+    #include "portaudio.h"
+    
+    #include "conf.c"
+    #include "console.c"
+
+    #define PRINT console_print
 
     // ------------------------------------------------------------------------------------------------------------ //
 	// ------------------------------------------ malloc ---------------------------------------------------------- //
@@ -197,15 +197,18 @@
                     threads[i].k = k;
                     threads[i].kn = kn;
                     threads[i].status = 1;
+					WakeByAddressSingle( &threads[i].status );
                     return; }
 					}
 					
     void threads_body( volatile struct thread *self ){
         while( 1 ){
 			self->status = 0;
-            while( self->status != 1 )  // wait to become == 1
-				if( self->status == 3 ){  // meanwhile check if stop sig
-					self->status = -1; return; }
+			int aaa = 0;
+			WaitOnAddress( &(self->status), &(aaa), sizeof(int), INFINITE);
+			if( self->status == 3 ){
+				self->status = -1;
+				return; }
             convolve(
                 self->in -self->kn+1, // * matlab
                 self->out,
@@ -226,8 +229,10 @@
 		for( int i=0; i<count; i++ )
 			if( threads[i].status == -1 )
 				CreateThread( 0, 10000000, &threads_body, threads+i, 0, 0 ); 
-		for( int i=count; i<threads_count; i++ )
+		for( int i=count; i<threads_count; i++ ){
 			threads[i].status = 3;
+			WakeByAddressSingle( &threads[i].status );
+			}
         threads_count = count;
 		threads_wait(); }
 
