@@ -202,22 +202,33 @@
 					}
 					
     void threads_body( volatile struct thread *self ){
+		self->status = 0;
+		int aaa = 0;
         while( 1 ){
-			self->status = 0;
-			int aaa = 0;
-			WaitOnAddress( &(self->status), &(aaa), sizeof(int), INFINITE);
+			
+			if( self->status == 0 )
+				WaitOnAddress( &(self->status), &aaa, sizeof(int), INFINITE );
+			
 			if( self->status == 3 ){
 				self->status = -1;
 				return; }
-            convolve(
-                self->in -self->kn+1, // * matlab
-                self->out,
-                self->len +self->kn-1, // * format
-                self->k,
-                self->kn
-                );
+				
+			if( self->status == 2 )
+				while( self->status == 2 );
+			
+			if( self->status == 1 ){
+				convolve(
+					self->in -self->kn+1, // * matlab
+					self->out,
+					self->len +self->kn-1, // * format
+					self->k,
+					self->kn
+					);
+				if( self->status == 1 )
+					self->status = 0;
 			}
-		 }
+		}
+	}
 
     void threads_prepare( int count ){
 		static int initialized = 0;
@@ -315,15 +326,21 @@
 			now = NOW;
 
 			// dith
-			dith_sig = (L-G) / 10.0 ;  // G to L for 10 seconds (speed)
+			dith_sig = (L-G) / 10.0;  // G to L for 1 second (speed)
+			//if( cursor > samplerate )
+			//	dith_sig /= 10.0 ;
 			dith_p = (int64_t)( (float)samplerate / ( dith_sig > 0.0 ? dith_sig : -dith_sig ) );
 			if( dith_t + dith_p < now ){
 				if( dith_sig < 0 ){
 					cursor += 1;
-					PRINT("%s corr +1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+					// todo: remove 1 from all stats so dith sig is lower next ime
+					PRINT("%s corr +1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); 
+					}
 				else {
 					cursor -= 1;
-					PRINT("%s corr -1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+					// todo: add 1 to all stats so dith sig is bigger next ime
+					PRINT("%s corr -1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor );
+					}
 				dith_t = now;
 			}
 
