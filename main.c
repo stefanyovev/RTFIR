@@ -499,8 +499,12 @@
 
 	// ------------------------------------------------------------------------------------------------------------ //
 
-    void CALLBACK every_20ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		SetWindowText( hEdit, console );
+	void draw();
+    void CALLBACK every_5ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+		if( console_changed ){
+			console_changed = 0;
+			SetWindowText( hEdit, console ); }
+		draw();
         if( cursor > -1 ){
             char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*200.0) ); // 50% == 100%
             SetWindowText( hLL, txt ); } }
@@ -879,7 +883,7 @@
 		SetDCPenColor(hdcMem, RGB(0,0,0));
 		LineTo( hdcMem, 199, 0 ); LineTo( hdcMem, 199, 199 );
 		LineTo( hdcMem, 0, 199 ); LineTo( hdcMem, 0, 0 );
-		BitBlt( hdc, 364, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
+		BitBlt( hdc, 382, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
 	}
 	// ----------------------------------------------------------------------------------
 	
@@ -923,7 +927,7 @@
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
-        hEdit = CreateWindowEx( 0, "EDIT", 0, WS_CHILD | WS_VISIBLE | WS_VSCROLL | ES_LEFT | ES_MULTILINE | ES_AUTOVSCROLL | ES_READONLY, 10, 460, 574, 200, hwnd, EDT, NULL, NULL);
+		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 10, 460, 370, 200, hwnd, EDT, NULL, NULL);
 
         SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -985,21 +989,12 @@
                 case 192000: SendMessage( hr4, BM_CLICK, 0, 0 ); }
 		} else SendMessage( hr1, BM_CLICK, 0, 0 );
 		
-		SetTimer( 0, 0, 20, (TIMERPROC) &every_20ms );
+		draw_prepare();		
+		SetTimer( 0, 0, 5, (TIMERPROC) &every_5ms );
 
         // loop
-        // while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
-            // TranslateMessage( &msg );
-            // DispatchMessage( &msg ); }
-
-		draw_prepare();
-
-		int done = 0;
-        while( !done ){
-            if( PeekMessage( &msg, NULL, 0, 0, PM_REMOVE ) ){
-                if( msg.message == WM_QUIT ) done = 1;
-                else { TranslateMessage( &msg ); DispatchMessage( &msg ); } }
-            draw();
-        }
+        while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
+            TranslateMessage( &msg );
+            DispatchMessage( &msg ); }
 
 	return msg.wParam; }
