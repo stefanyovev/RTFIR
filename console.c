@@ -24,6 +24,7 @@
 	volatile char volatile *console;
 	volatile char *console_data, *console_tmp1, *console_tmp2;
 	volatile int console_len, console_lll;  // static
+	volatile int console_changed;
 
 	void console_init(){
 		
@@ -58,6 +59,7 @@
 
 		console_len = CONSOLE_HEIGHT-1;  // content-length; without the null; now full with newlines x(height-1)
 		console_lll = 0;  // lastlinelen
+		console_changed = 1;
 		
 		}
 
@@ -105,6 +107,7 @@
 			console = console_data;
 			//printf( "\n---console---\n%s\n---/console---", console );
 			//exit(1);
+			console_changed = 1;
 			return;  // done
 			}
 		
@@ -139,6 +142,7 @@
 		// set
 		console_len = CONSOLE_SIZE+CONSOLE_HEIGHT-1 -ofs;
 		console = console_data +ofs ;
+		console_changed = 1;
 
 		//printf( "\n---console---\n%s\n---/console---", console );
 		//exit(1);
