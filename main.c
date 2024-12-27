@@ -157,7 +157,7 @@
         int i = length - kernel_length;
         out[i] = 0.0;
         for(int k=0; k<kernel_length; k++){
-            out[i] += in[i+k] * (*((float*)(kernel +kernel_length -k -1 ))); }
+            out[i] += in[i+k] * (*((float*)(kernel +k ))); }
         return 0; }    
 
     // ############################################################################################################ //
