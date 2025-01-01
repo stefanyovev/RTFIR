@@ -1,13 +1,19 @@
 todos:
+ - correction msg to be 'replayed'|'skipped'
+ - move load label
+ - untie threads from convolve; job/args struct; untie convolve_prepare from set_filter; int convolve_prepare(k,kn)
+ - convolve to separate file with tests
+ - build: version inputbox / put version in exe / why two entires(cmakelistst and build.sh) / dont requrie new files to be added to buildlist
+ - no-filter:
+    - empty combo
+    - sets k=0 to memcopy
+    - padded default filter shuold produce the same as memcopy
+    - module/main()/like console/tests with sample data and id filter
  - timing:
     - startup seq. 100ms 100ms then 800ms correct x10. start copy at 1sec
     - average ports min/max (because it suddenly changes)
     - one jobs queue for all threads. (InterlockedIncrement) jobid/jobrow/end_address/cursor_processed. input submits non-blocking. Output waits the jobrow.
     - QueryUnbiasedInterruptTimePrecise, QuerySystemTimePreciseAsFileTime
- - no-filter:
-    - empty combo
-    - sets k=0 to memcopy
-    - padded default filter shuold produce the same as memcopy
  - profile/measure/clock_stopwatch/duty_cycles
  - configure ui available before start
  - delay
