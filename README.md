@@ -17,7 +17,6 @@ Todos:
     - fileopendlg/comctl6 for filters dir
  - build:
     - version inputbox / put version in exe
-	- why two entires(cmakelistst and build.sh) / dont requrie new files to be added to buildlist
     - comctl
 
  - timing:
