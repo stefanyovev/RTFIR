@@ -20,7 +20,9 @@ Todos:
     - comctl
 
  - timing:
-    - startup seq. 100ms 100ms then 800ms correct x10. last corrrection also corrects history then start copy at 1sec
+    - startup seq.
+        - dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot;
+		- 100ms 100ms then 800ms correct x10. last corrrection also corrects history then start copy at 1sec
     - average ports min/max (because it suddenly changes)
 	- output buffers - so input callback can threads_submit; why every channel waits others
     - one jobs queue for all threads. (InterlockedIncrement) jobid/jobrow/end_address/cursor_processed. input submits non-blocking. Output waits the jobrow.

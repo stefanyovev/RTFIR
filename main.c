@@ -67,7 +67,6 @@
 	// keep 3 seconds of audio (msize). 1 second max filter. 1 second max delay. 1 second left for buffersizes and correction headroom.
 	// repeat these 3 seconds 3 times in memory and use the middle one so memcopy does not care for boundaries.
 	// constantly measure both buffersizes (L) and cursor-to-end-of-input-buffer (G). should be equal.
-	// TODO: the print; dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot
 	
 	struct stat {
 		int64_t t;
