@@ -8,11 +8,12 @@
     #include <windows.h>    
     #include "portaudio.h"
     
-    #include "conf.c"
     #include "console.c"
-
     #define PRINT console_print
 
+	#include "threads.c"
+	#include "conf.c"
+	
     // ------------------------------------------------------------------------------------------------------------ //
 	// ------------------------------------------ malloc ---------------------------------------------------------- //
 
@@ -62,7 +63,6 @@
 
     // ############################################################################################################ //
 	// ########################################## GLOBALS ######################################################### //
-	// ############################################################################################################ //
 
 	// keep 3 seconds of audio (msize). 1 second max filter. 1 second max delay. 1 second left for buffersizes and correction headroom.
 	// repeat these 3 seconds 3 times in memory and use the middle one so memcopy does not care for boundaries.
@@ -115,10 +115,25 @@
 	volatile int64_t dith_p;  // correction period [samples]
 	
 	int jobs_per_channel; 
-	
-		
+
     // ############################################################################################################ //
 	// ########################################## FILTERS ######################################################### //
+	
+	struct op_clear_arg { void *p; int len; };		
+	void op_clear( void *task ){ struct op_clear_arg *t = (struct op_clear_arg *) task;
+		memset( t->p, 0, t->len * sizeof(float) ); }
+
+	struct op_copy_arg { void *dst, *src; int len; };	
+	void op_copy( void *task ) { struct op_copy_arg *t = (struct op_copy_arg *) task;
+		memcpy( t->dst, t->src, t->len * sizeof(float) ); }
+		
+	struct convolve_task {
+        float *in;
+        float *out;
+        int len;
+        __m256* k;
+        int kn;
+	};
 
     #define ALIGNMENT 32
     
@@ -134,7 +149,15 @@
     #define SSE_SIMD_LENGTH 4
     #define AVX_SIMD_LENGTH 8
     #define VECTOR_LENGTH 16
-    int convolve( float* in, float* out, int length, __m256* kernel, int kernel_length ){
+	
+    void convolve( void *task ){
+		float* in = ((struct convolve_task*)task)->in;
+		float* out = ((struct convolve_task*)task)->out;
+		int length = ((struct convolve_task*)task)->len;
+		__m256* kernel = ((struct convolve_task*)task)->k;
+		int kernel_length = ((struct convolve_task*)task)->kn;
+		in = in -kernel_length +1;  // scipy convolve mode valid
+		length = length +kernel_length -1;  // see in orig repo
         // original code: github/hgomersall/SSE-convolution/convolve.c
         // convolve_avx_unrolled_vector_unaligned_fma
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -156,100 +179,11 @@
         int i = length - kernel_length;
         out[i] = 0.0;
         for(int k=0; k<kernel_length; k++){
-            out[i] += in[i+k] * (*((float*)(kernel +k ))); }
-        return 0; }    
-
-    // ############################################################################################################ //
-	// ########################################## THREADS ######################################################### //
-
-    struct thread {
-        int status;  // -1 stopped; 0 done/waiting; 1 work/working; 2 emerging job; 3 stop sig
-		// job:
-        float *in;
-        float *out;
-        int len;
-        __m256* k;
-        int kn;
-    };
-
-    struct thread threads[100];  // null terminated list of pointers
-    int threads_count = 0;
-	
-	void threads_wait(){
-		while(1){
-			int some_working = 0;
-			for( int i=0; i<threads_count; i++ )
-				if( threads[i].status > 0 ){
-					some_working = 1;
-					break; }
-			if( !some_working )
-				return; } }
-
-    void threads_submit( float *in, float *out, int len, __m256 *k, int kn ){
-        while( 1 )
-            for( int i=0; i<threads_count; i++ )
-                if( threads[i].status == 0 ){
-                    threads[i].status = 2;
-                    threads[i].in = in;
-                    threads[i].out = out;
-                    threads[i].len = len;
-                    threads[i].k = k;
-                    threads[i].kn = kn;
-                    threads[i].status = 1;
-					WakeByAddressSingle( &threads[i].status );
-                    return; }
-					}
-					
-    void threads_body( volatile struct thread *self ){
-		self->status = 0;
-		int aaa = 0;
-        while( 1 ){
-			
-			if( self->status == 0 )
-				WaitOnAddress( &(self->status), &aaa, sizeof(int), INFINITE );
-			
-			if( self->status == 3 ){
-				self->status = -1;
-				return; }
-				
-			if( self->status == 2 )
-				while( self->status == 2 );
-			
-			if( self->status == 1 ){
-				convolve(
-					self->in -self->kn+1, // * matlab
-					self->out,
-					self->len +self->kn-1, // * format
-					self->k,
-					self->kn
-					);
-				if( self->status == 1 )
-					self->status = 0;
-			}
-		}
-	}
-
-    void threads_prepare( int count ){
-		static int initialized = 0;
-		if( !initialized ){
-			for( int i=0; i<100; i++ )
-				threads[i].status = -1;
-			initialized = 1;
-			threads_count = 0; }
-		for( int i=0; i<count; i++ )
-			if( threads[i].status == -1 )
-				CreateThread( 0, 10000000, &threads_body, threads+i, 0, 0 ); 
-		for( int i=count; i<threads_count; i++ ){
-			threads[i].status = 3;
-			WakeByAddressSingle( &threads[i].status );
-			}
-        threads_count = count;
-		threads_wait(); }
+            out[i] += in[i+k] * (*((float*)(kernel +k ))); } }    
 
 
     // ############################################################################################################ //
 	// ########################################## MAIN ############################################################ //
-	// ############################################################################################################ //
 
 
 	void _makestat( volatile struct port * p ){
@@ -333,18 +267,16 @@
 				if( dith_sig < 0 ){
 					cursor += 1;
 					// todo: remove 1 from all stats so dith sig is lower next ime
-					PRINT("%s corr +1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); 
+					PRINT("%s skipped 1 sample %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); 
 					}
 				else {
 					cursor -= 1;
 					// todo: add 1 to all stats so dith sig is bigger next ime
-					PRINT("%s corr -1 cursor %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor );
+					PRINT("%s replayed 1 sample %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor );
 					}
 				dith_t = now;
 			}
-
 		}
-
 	}
 		
 
@@ -355,6 +287,10 @@
         const PaStreamCallbackTimeInfo *timeInfo,
         PaStreamCallbackFlags statusFlags,
         void *userdata ){
+
+		struct op_clear_arg clear_task;
+		struct op_copy_arg  copy_task;
+		struct convolve_task T;
 
         if( statusFlags ){
             if( paInputUnderflow & statusFlags ) PRINT( "Input Underflow \n" );
@@ -379,32 +315,42 @@
         if( output ){		
 		
 			_makestat( ports+1 );
-			
-			if( cursor < 0 )
-				for( int i=0; i<ports[1].channels_count; i++ )
-					memset( output[i], 0, frameCount*sizeof(float) );
-            else {
+
+			if( cursor > 0 ){
 				if( cursor + frameCount > ports[0].len ) PRINT( "GLITCH %d \r\n", cursor -ports[0].len );
-				if( cursor < ports[0].len -msize ) PRINT( "GLITCH %d \r\n", ports[0].len -msize -cursor );
-                // write
-                for( int i=0; i<ports[1].channels_count; i++ )
-					if( map[i].src == -1 )
-						memset( output[i], 0, frameCount*sizeof(float) );
-					else if( !map[i].k )
-						memcpy( output[i], canvas + map[i].src*msize*3 +msize + cursor%msize, frameCount*sizeof(float) );
-                    else {
-						int jlen = frameCount / jobs_per_channel;
-						int rem = frameCount % jobs_per_channel;                        
-						for( int j = 0; j<jobs_per_channel; j++ )
-							threads_submit(
-								canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen,
-								output[i] +j*jlen,
-								(j == jobs_per_channel-1) ? jlen+rem : jlen,
-								map[i].k,
-								map[i].kn ); 
-						threads_wait();
-						}
-				cursor += frameCount; }
+				if( cursor < ports[0].len -msize ) PRINT( "GLITCH %d \r\n", ports[0].len -msize -cursor ); }
+
+			// write
+			int jlen = frameCount / jobs_per_channel;
+			int rem = frameCount % jobs_per_channel;                        
+			for( int j = 0; j<jobs_per_channel; j++ )
+				for( int i=0; i<ports[1].channels_count; i++ ){
+					if( cursor < 0 || map[i].src == -1 ){
+						// clear
+						clear_task.p = output[i] +j*jlen;
+						clear_task.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
+						threads_submit( &op_clear, &clear_task, sizeof(clear_task) );
+					}
+					else if( cursor >= 0 && map[i].src >= 0 && !map[i].k ){
+						// copy
+						copy_task.dst = output[i] +j*jlen;
+						copy_task.src = canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen;
+						copy_task.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
+						threads_submit( &op_copy, &copy_task, sizeof(copy_task)  );
+					}
+					else {
+						// convolve
+						T.in = canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen;
+						T.out = output[i] +j*jlen;
+						T.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
+						T.k = map[i].k;
+						T.kn = map[i].kn;
+						threads_submit( &convolve, &T, sizeof(T) );
+					}
+				}
+			threads_wait();
+			if( cursor >= 0 )
+				cursor += frameCount;
 
             ports[1].len += frameCount;			
             _makestat( ports+1 );
@@ -418,6 +364,7 @@
         if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );        
 		samplerate = msize = ssize = canvas = ports = map = gstat = gstat_len = jobs_per_channel = 0;
 		cursor = -1; }
+
 
     int start( int input_device_id, int output_device_id, int sr, int tc ){  // -> bool
 		int in = Pa_GetDeviceInfo( input_device_id )->maxInputChannels;
@@ -437,7 +384,7 @@
 		ports[1].channels_count = on;
 		ports[1].stats = getmem( sizeof(struct stat) * ssize );
 		clock_init( sr );
-		threads_prepare( tc ); jobs_per_channel = (int)ceil( ((float)tc)/((float)on) );		
+		threads_init( tc ); jobs_per_channel = (int)ceil( ((float)tc)/((float)on) );		
         for( int i=0; i<2; i++ ){						
             PRINT( "starting %s ... ", ( i==0 ? "input" : "output" ) );
 			 
@@ -574,12 +521,14 @@
 				free( filters[i]->k ); }
 			free( filters ); filters = 0; }
 		filters = getmem( sizeof(struct filter *) * 100 );
+		// add None filter
         filters[0] = getmem( sizeof( struct filter ) );
 		filters[0]->name = getmem( 5 ); strcpy( filters[0]->name, "None" );
         filters[0]->k = getmem( sizeof(float) * 1 );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;        
         WIN32_FIND_DATA r;
+		// add files
         HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
         int i = 1;
         do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){

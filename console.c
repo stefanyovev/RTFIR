@@ -4,9 +4,8 @@
 	#include <stdlib.h>
 	#include <string.h>
 
-	// the print function
-	
-	// fast / thread-safe / non-blocking
+	// fast print function
+
 	// prints to memory / exposes an alwayss valid string for reading / may mix content but not crash or block
 	
 	// init() first
@@ -25,6 +24,7 @@
 	volatile char *console_data, *console_tmp1, *console_tmp2;
 	volatile int console_len, console_lll;  // static
 	volatile int console_changed;
+	//HANDLE console_lock;
 
 	void console_init(){
 		
@@ -61,10 +61,13 @@
 		console_lll = 0;  // lastlinelen
 		console_changed = 1;
 		
+		//console_lock = CreateMutex( 0, 0, 0 );
 		}
 
 	void console_print ( char *format, ... ){  // max width*height
-
+		
+		//WaitForSingleObject( console_lock, INFINITE );
+		
 		int inlen;
 	
 		// expand "%".
@@ -147,7 +150,7 @@
 		//printf( "\n---console---\n%s\n---/console---", console );
 		//exit(1);
 
-
+		//ReleaseMutex( console_lock );
 		}
 
 
