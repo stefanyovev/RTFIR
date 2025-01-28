@@ -139,6 +139,7 @@
     
     void set_filter( int out, float *k, int kn, char *kname ){
         if( map[out].k ) { aligned_free( map[out].k ); map[out].k = 0; }
+		if( !k ) return;
         map[out].kname = kname;
 		map[out].kn = ( kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
 		map[out].k = aligned_malloc( map[out].kn * sizeof(float) * 8, ALIGNMENT );
@@ -521,14 +522,14 @@
 				free( filters[i]->k ); }
 			free( filters ); filters = 0; }
 		filters = getmem( sizeof(struct filter *) * 100 );
-		// add None filter
+		// add 'None' - unity kernel
         filters[0] = getmem( sizeof( struct filter ) );
 		filters[0]->name = getmem( 5 ); strcpy( filters[0]->name, "None" );
         filters[0]->k = getmem( sizeof(float) * 1 );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;        
-        WIN32_FIND_DATA r;
 		// add files
+        WIN32_FIND_DATA r;
         HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
         int i = 1;
         do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
@@ -560,23 +561,6 @@
 
 	// ------------------------------------------------------------------------------------------------------------ //
 
-    void fill_left_combos(){
-		char txt[250];
-		GetDlgItemText( hwnd, CMB1, txt, 250 );
-        for( int i=0; i<10; i++ ){
-            SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
-            SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"None" );
-            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-            for( int j=0; j<Pa_GetDeviceInfo( device_id( txt ) )->maxInputChannels; j++ ){
-				char n[3]; sprintf( n, "%d", j+1 );
-                SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } } }
-
-	void fill_right_combos(){
-		for( int i=0; i<10; i++ ){
-			SendMessage( cbs2[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
-			for( int j=0; filters[j]; j++ ) SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j]->name );
-			SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
-
     int devices_as_in_conf(){ // whether the two devices selected are as in the conf
         char a[250], b[250];
         if( !conf_get( "device1" ) || !conf_get( "device2" ) ) return 0;
@@ -590,11 +574,33 @@
         return sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 && samplerate_from_conf == samplerate; }
 
     void show_conf(){ // sets the bottom combos as in conf or clear them; routing if devices are same and filters if devs&SR are same
-        if( !devices_as_in_conf() ){
+
+		// fill left combos
+		char txt1[250], txt2[250];
+		GetDlgItemText( hwnd, CMB1, txt1, 250 );
+		GetDlgItemText( hwnd, CMB2, txt2, 250 );
+		for( int i=0; i<Pa_GetDeviceInfo( device_id( txt2 ) )->maxOutputChannels; i++ ){
+			SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+			SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
+			SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+			for( int j=0; j<Pa_GetDeviceInfo( device_id( txt1 ) )->maxInputChannels; j++ ){
+				char n[3]; sprintf( n, "%d", j+1 );
+				SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } }
+
+		// fill right combos
+		for( int i=0; i<10; i++ ){
+			SendMessage( cbs2[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+			SendMessage( cbs2[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
+			for( int j=0; filters[j]; j++ ) SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j]->name );
+			SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
+			
+        if( !devices_as_in_conf() ){ // clear selections
             for( int i=0; i<10; i++ ){
                 SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
                 SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
-            return; }
+			return;
+            }
+
         char key[20]; int val;
         for( int i=0; i<10; i++ ){
             sprintf( key, "out%d", i+1 );
@@ -603,7 +609,7 @@
             else SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
             sprintf( key, "filter%d", i+1 );
             if( samplerate_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) ) )
-                SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 );
+                SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 );
             else SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
 
     void save_conf(){
@@ -645,7 +651,7 @@
     LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
         if( msg == WM_COMMAND ){
 
-            if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){  // samplerate changed
+            if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){  // samplerate clicked
 
 				switch( LOWORD(wParam) ){
                     case R1: samplerate = 44100; break;
@@ -653,7 +659,8 @@
                     case R3: samplerate = 96000; break;
                     case R4: samplerate = 192000; }
 					
-				load_filters( samplerate );
+				load_filters( samplerate ); // maxlen 1s
+				show_conf();
 
             } else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){  //  config device clicked
                 char txt[250];
@@ -671,8 +678,10 @@
                     CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
             } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
-
+				show_conf();
+				
             } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){  // device 2 changed
+				show_conf();
                 
             } else if( LOWORD(wParam) == BTN1 ){  // play clicked
                 int sd, dd;
@@ -691,8 +700,6 @@
                     EnableWindow( hCombo1, 0 );
                     EnableWindow( hCombo2, 0 );
                     EnableWindow( hBtn, 0 );
-					fill_left_combos();
-					fill_right_combos();
 					show_conf();
                     for( int i=0; i<ports[1].channels_count; i++ ){
                         if( i < 10 ){
@@ -703,10 +710,10 @@
                                 if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
                                     map[i].src = val-1;
                                 sprintf( key, "filter%d", i+1 );
-                                if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && strcmp( conf_get( key ), "None" ) != 0 && filter_p( conf_get( key ) )){
+                                if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
 									struct filter *fl = filter_p( conf_get( key ) );
                                     set_filter( i, fl->k, fl->kn, fl->name );
-                                    SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )), (LPARAM)0 ); } }
+                                    SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } }
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
                             EnableWindow( cbs2[i], 1 ); } }
                     }
@@ -714,22 +721,29 @@
             } else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){
                 int out = LOWORD(wParam) - CB1;                
                 char  txt[20];
-                GetDlgItemText( hwnd, CB1+out, txt, 20 );                
-                int chan = txt[0]-48-1;
-                if( chan < 10 ) {
-                    map[out].src = chan;
-                    PRINT( "mapped out %d to in %d \r\n", out+1, chan+1 ); }
-                else {
-                    map[out].src = -1;
-                    PRINT( "muted out %d \r\n", out+1 ); }
+                GetDlgItemText( hwnd, CB1+out, txt, 20 );      
+				if( txt[0] == 0 ){
+					map[out].src = -1;
+                    PRINT( "out %d: removed source \r\n", out+1 );
+				}else {
+					int chan = txt[0]-48-1;
+					map[out].src = chan;
+					PRINT( "out %d: set source %d \r\n", out+1, chan+1 );
+			    }
+
                 
             } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){                
                 int out = LOWORD(wParam) - CB2;                
-                char  txt[100];
-                GetDlgItemText( hwnd, CB2+out, txt, 100 );
-                struct filter *fl = filter_p( txt );
-                set_filter( out, fl->k, fl->kn, fl->name );            
-                PRINT( "mapped out %d to filter %s \r\n", out+1, txt );                
+                char txt[100];
+				GetDlgItemText( hwnd, CB2+out, txt, 100 );
+				if( txt[0] == 0 ){
+					set_filter( out, 0, 0, 0 );
+					PRINT( "out %d: removed filter \r\n", out );
+				} else {
+					struct filter *fl = filter_p( txt );
+					set_filter( out, fl->k, fl->kn, fl->name );            
+					PRINT( "out %d: set filter %s \r\n", out, txt );                
+				}
             }
         }
 
