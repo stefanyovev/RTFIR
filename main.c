@@ -157,8 +157,8 @@
 		int length = ((struct convolve_task*)task)->len;
 		__m256* kernel = ((struct convolve_task*)task)->k;
 		int kernel_length = ((struct convolve_task*)task)->kn;
-		in = in -kernel_length +1;  // scipy convolve mode valid
-		length = length +kernel_length -1;  // see in orig repo
+		in = in -kernel_length;  // scipy convolve mode valid
+		length = length +kernel_length;  // see in orig repo
         // original code: github/hgomersall/SSE-convolution/convolve.c
         // convolve_avx_unrolled_vector_unaligned_fma
         __m256 data_block __attribute__ ((aligned (ALIGNMENT)));
@@ -458,8 +458,8 @@
     HWND cbs2[10];
     HWND hEdit;
 
-    LOGFONT font1 = {0}, font2 = {0}, font3 = {0};
-    HFONT hfont1, hfont2, hfont3;	
+    LOGFONT font1 = {0}, font2 = {0}, font3 = {0}, font4 = {0};
+    HFONT hfont1, hfont2, hfont3, hfont4;
 
 	// ------------------------------------------------------------------------------------------------------------ //
 
@@ -470,7 +470,7 @@
 			SetWindowText( hEdit, console ); }
 		draw();
         if( cursor > -1 ){
-            char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*200.0) ); // 50% == 100%
+            char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*100.0) );
             SetWindowText( hLL, txt ); } }
 
 	// ------------------------------------------------------------------------------------------------------------ //
@@ -724,11 +724,11 @@
                 GetDlgItemText( hwnd, CB1+out, txt, 20 );      
 				if( txt[0] == 0 ){
 					map[out].src = -1;
-                    PRINT( "out %d: removed source \r\n", out+1 );
+                    PRINT( "%s out %d: removed source \r\n", timestr(NOW/samplerate), out+1 );
 				}else {
 					int chan = txt[0]-48-1;
 					map[out].src = chan;
-					PRINT( "out %d: set source %d \r\n", out+1, chan+1 );
+					PRINT( "%s out %d: set source %d \r\n", timestr(NOW/samplerate), out+1, chan+1 );
 			    }
 
                 
@@ -738,11 +738,11 @@
 				GetDlgItemText( hwnd, CB2+out, txt, 100 );
 				if( txt[0] == 0 ){
 					set_filter( out, 0, 0, 0 );
-					PRINT( "out %d: removed filter \r\n", out );
+					PRINT( "%s out %d: removed filter \r\n", timestr(NOW/samplerate), out );
 				} else {
 					struct filter *fl = filter_p( txt );
 					set_filter( out, fl->k, fl->kn, fl->name );            
-					PRINT( "out %d: set filter %s \r\n", out, txt );                
+					PRINT( "%s out %d: set filter %s \r\n", timestr(NOW/samplerate), out, txt );                
 				}
             }
         }
@@ -892,7 +892,11 @@
         strcpy(font3.lfFaceName, "Tahoma");
         font3.lfCharSet = DEFAULT_CHARSET;
         font3.lfHeight = 18;
-        hfont3 = CreateFontIndirect(&font3);        
+        hfont3 = CreateFontIndirect(&font3);
+        strcpy(font4.lfFaceName, "Consolas");
+        font4.lfCharSet = DEFAULT_CHARSET;
+        font4.lfHeight = 13;
+        hfont4 = CreateFontIndirect(&font4);    
 
 		// create
 		hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );        
@@ -906,7 +910,7 @@
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
-		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 10, 460, 370, 200, hwnd, EDT, NULL, NULL);
+		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hwnd, EDT, NULL, NULL);
 
         SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -918,7 +922,7 @@
         SendMessageA( hCombo1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hCombo2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hBtn, WM_SETFONT, (WPARAM)hfont3, (LPARAM)MAKELONG(TRUE, 0));
-        SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+        SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont4, (LPARAM)MAKELONG(TRUE, 0));
 
         for( int i=0; i<10; i++ ){        
             char str[7]; HANDLE h;

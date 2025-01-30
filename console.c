@@ -16,8 +16,11 @@
 
 	// tests are for 3x3
 	
+	// TODO: when wrapped its more than CONSOLE_HEIGHT
+	// TODO: mode without wrapping
+	
 	#define CONSOLE_WIDTH 80
-	#define CONSOLE_HEIGHT 12
+	#define CONSOLE_HEIGHT 16
 	#define CONSOLE_SIZE (CONSOLE_WIDTH*CONSOLE_HEIGHT)
 
 	volatile char volatile *console;

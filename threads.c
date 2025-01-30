@@ -8,11 +8,10 @@
 	//   T    B       H
 	//  tail  body    head
 
-	// TODO: queue overflow ? add 1 global var to track queue usage %/MB; notify on failure
-	// TODO: dont use waitonaddress; only events... create/set/reset/waitforsingleobject.. sig_task_available || sig_all_done || tail_only
+	// TODO: track queue usage %/MB = (head > tail) ? (head-tail)/20MB : (tail-head)/20MB; notify on failure
 
 	#include <stdlib.h>   // memcpy
-	#include <windows.h>  // CreateThread, CreateMutex, WaitForSingleObject, WaitOnAddress, WakeByAddressSingle, HANDLE
+	#include <windows.h>  // CreateThread, CreateMutex, CreateEvent, WaitForSingleObject, SetEvent, ReleaseMutex, ResetEvent, HANDLE
 
 
 	#define THREADS_MAX_COUNT 100
@@ -40,7 +39,8 @@
 	
 	struct threads_task *threads_queue;  // all tasks queue
 	HANDLE threads_queue_mutex;  // put | get | remove
-	volatile int threads_queue_empty;
+	HANDLE threads_queue_empty; // event
+	HANDLE threads_queue_avail; // event
 	
 	volatile struct threads_task volatile
 		*threads_queue_head,  // where to put the new one / first with status 0
@@ -50,18 +50,13 @@
 
 
 	// MAIN
-	inline static void threads_queue_lock(){ WaitForSingleObject( threads_queue_mutex, INFINITE ); }  // should return 0; case WAIT_ABANDONED ?	
-	inline static void threads_queue_unlock(){ ReleaseMutex( threads_queue_mutex ); }
-	inline static void threads_waitforend(){ int undesired_value = 0; WaitOnAddress( &threads_queue_empty, &undesired_value, sizeof(int), INFINITE ); }
-	inline static void threads_wakeforend(){ WakeByAddressSingle( &threads_queue_empty ); }
-	inline static void threads_waitfortask(){ struct threads_task *undesired_value = 0; WaitOnAddress( &threads_queue_body, &undesired_value, sizeof(struct threads_task *), INFINITE ); }
-	inline static void threads_wakefortask(){ WakeByAddressSingle( &threads_queue_body ); }
-	// NOTE: WaitOnAddress returns without being signalled very often
+	static void threads_queue_lock(){ while( WaitForSingleObject( threads_queue_mutex, INFINITE ) != 0 ) PRINT("X"); }
+	static void threads_queue_unlock(){ ReleaseMutex( threads_queue_mutex ); }
+	static void threads_wait_empty(){ while( WaitForSingleObject( threads_queue_empty, INFINITE ) != 0 ) PRINT("X"); }
+	static void threads_wait_avail(){ while( WaitForSingleObject( threads_queue_avail, INFINITE ) != 0 ) PRINT("X"); }
 
 	void threads_submit( void *function, void *arg, int argsize ){
 
-		// put
-		// overflowed if threads_queue_head->status != 0. usage = (head > tail) ? (head-tail)/20MB : (tail-head)/20MB		
 		threads_queue_lock();
 		memcpy( &(threads_queue_head->arg), arg, argsize );
 		threads_queue_head->argsize = argsize;
@@ -71,73 +66,87 @@
 			threads_queue_head->next = threads_queue;	
 		threads_queue_head->status = 2;  // queued
 		
-		if( !threads_queue_body )
+		if( !threads_queue_body ){
 			threads_queue_body = threads_queue_head;
-
-		threads_queue_empty = 0;
+			ResetEvent( threads_queue_empty );
+			SetEvent( threads_queue_avail );
+			}
 		threads_queue_head = threads_queue_head->next;
 		threads_queue_unlock();
-
-		threads_wakefortask();		
 	}
 
-	void threads_main( volatile struct threads_thread *self ){
-		struct threads_task *T, *t;
-		while( 1 ){
-			
-			if( self->status == 3 ){
-				self->status = -1;
-				break;
-				}
-
-			self->status = 0;  // waiting
-			threads_waitfortask(); // may be fake alarm
-			
-			// get
+	struct threads_task * threads_queue_get(){  
+		struct threads_task *T;
+		while(1){
+			threads_wait_avail();
 			threads_queue_lock();
 			if( !threads_queue_body ) { threads_queue_unlock(); continue; }  // fake alarm
 			T = threads_queue_body;
 			T->status = 1;  // taken
-			threads_queue_body = T->next->status == 2 ? T->next : 0;
+			if( T->next->status == 2 ){
+				threads_queue_body = T->next; }
+			else {
+				threads_queue_body = 0;
+				ResetEvent( threads_queue_avail );
+			}
 			if( !threads_queue_tail )
 				threads_queue_tail = T;
 			threads_queue_unlock();
-			
-			// call
-			self->status = 1;  // working
-			T->function( &(T->arg) );
-			
-			// done/remove
-			threads_queue_lock();
-			if( T == threads_queue_tail ){
-				t = T;
-				while( t = t->next ){
+			return T;
+		}
+	}
+	
+	void threads_queue_delete( struct threads_task *T ){  
 
-					if( t->status == 1 ){
-						threads_queue_tail = t;
-						break; }
-
-					if( t->status == 2 ){
-						threads_queue_tail = 0;
-						break; }
-						
-					if(  t->status == 0 ){
-						threads_queue_tail = 0;
-						threads_queue_empty = 1;
-						threads_wakeforend();
-						break; }
-				}
+		threads_queue_lock();
+		if( T == threads_queue_tail ){
+			threads_queue_tail = 0;
+			struct threads_task *t = T;
+			while( t = t->next ){
+				if( t->status == 1 ){
+					threads_queue_tail = t;
+					break; }
+				if( t->status == 2 )
+					break;
+				if( t == threads_queue_head ){
+					SetEvent( threads_queue_empty );
+					break; }
 			}
-			memset( T, 0, sizeof(struct threads_task) -sizeof(int) +T->argsize );
-			threads_queue_unlock();
+		}
+		T->status = 0 ;
+		threads_queue_unlock();	
+		}
+
+	void threads_main( volatile struct threads_thread *self ){
+		struct threads_task *T;
+		while( 1 ){
+			
+			if( self->status == 3 ){
+				self->status = -1;
+				break; }
+
+			self->status = 0;
+			T = threads_queue_get();
+			self->status = 1;
+			T->function( &(T->arg) );
+			threads_queue_delete( T );
 		}
 	}
 
 	void threads_wait(){
 		while(1){
-			threads_waitforend(); // may be fake alarm
-			if( threads_queue_empty ) // indeed empty
+			if( !threads_queue_tail && !threads_queue_body ){
 				return;
+			}
+			threads_wait_empty();
+			/*
+			if( threads_queue_tail || threads_queue_body ){
+				PRINT(" 4");
+			}else{
+				PRINT(" 5");
+				return;
+			}
+			*/
 		}
 		}
 
@@ -156,12 +165,12 @@
 		threads_queue = malloc( THREADS_QUEUE_SIZE * 1024 * 1024 );
 		if( !threads_queue ) return 0;
 		memset( threads_queue, 0, THREADS_QUEUE_SIZE * 1024 * 1024 );
-		threads_queue_empty = 1;
 		threads_queue_head = threads_queue;
 		threads_queue_body = 0;
 		threads_queue_tail = 0;
 		threads_queue_mutex = CreateMutex( 0, 0, 0 );
-		threads_count = 0;
+		threads_queue_empty = CreateEvent( 0, 1, 1, 0 );
+		threads_queue_avail = CreateEvent( 0, 1, 0, 0 );
 		threads_setcount( count );
 	}
 
