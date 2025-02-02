@@ -1,15 +1,13 @@
-Realtime Loudspeaker Crossover for Windows
+Realtime Sound Crossover for Windows
 
 Todos:
-
+ 
  - find out why default filter differs from memcopy / slightly displaced / lowpass pops
-	- padded default filter shuold produce the same as memcopy
+	- padded default filter should produce the same as memcopy
+	- visual analyzer
 
- - ui:
-    - widgets layer; row widget; create on wm_create in wndproc maybe
-
- - build:
-    - version inputbox / put version in exe
+ - generate filters
+ - filters/44100/name.txt
 
  - timing:
     - startup seq.
