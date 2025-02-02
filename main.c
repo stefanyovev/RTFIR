@@ -374,7 +374,7 @@
 		samplerate = sr;
 		msize = sr * 3;
 		ssize = sr * 2;
-		canvas = getmem( sizeof(float) * msize * 3 * in );
+		canvas = getmem( sizeof(float) * msize * 4 * in );  // 4th is just because the third memcopy may be out
 		ports = getmem( sizeof(struct port) * 2 );
 		map = getmem( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) { map[i].src = -1; map[i].k = 0; }
 		lstat = getmem( sizeof(struct stat) * ssize ); lstat_len = 0;		
