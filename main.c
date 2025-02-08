@@ -5,61 +5,24 @@
     #include <string.h>
     #include <math.h>
     #include <immintrin.h>	
-    #include <windows.h>    
     #include "portaudio.h"
-    
-    #include "console.c"
+	#include <windows.h>  // MessageBox    
+	
+	#define ERROR(x) { MessageBox( GetActiveWindow(), x, "ERROR", MB_OK ); exit(1); }
+
+	#include "mem.c"
+	#define MEM(x) mem_alloc(x)
+	#define MEMA(x,y) mem_alloc_aligned(x,y)
+	#define FREE(x) mem_free(x)
+
+	#include "console.c"
     #define PRINT console_print
 
-	#include "threads.c"
-	#include "conf.c"
-	
-    // ------------------------------------------------------------------------------------------------------------ //
-	// ------------------------------------------ malloc ---------------------------------------------------------- //
-
-    void * getmem( size_t count ){
-        void *p = malloc( count );
-        if( !p ){ MessageBox( GetActiveWindow(), "Out of memory", "Out of memory", MB_OK ); exit(1); };
-		memset( p, 0, count );
-        return p; }
-
-    void *aligned_malloc( size_t bytes, size_t alignment ) {
-        void *p1, *p2; p1 = getmem( bytes + alignment + sizeof(size_t) );
-        size_t addr = (size_t)p1 +alignment +sizeof(size_t);
-        p2 = (void *)(addr -(addr%alignment));
-        *((size_t *)p2-1) = (size_t)p1;
-        return p2; }
-
-    void aligned_free( void *p ){
-        free((void *)(*((size_t *) p-1))); }
-
-	// ------------------------------------------------------------------------------------------------------------ //
-	// ------------------------------------------ clock ----------------------------------------------------------- //
-
-	double clock_tick_in_samples;
-	int64_t clock_count_first;  // ??
-
-	void clock_init( int samplerate ){
-		int64_t freq;
-		QueryPerformanceFrequency( &freq );
-		clock_tick_in_samples = (double)samplerate / (double)freq;
-		QueryPerformanceCounter( &clock_count_first ); }
-
-	int64_t clock_time(){
-		int64_t count;
-		QueryPerformanceCounter( &count );
-		count -= clock_count_first;
-		return (int64_t)floor( ((double)count)*clock_tick_in_samples ); }
-
+	#include "clock.c"
 	#define NOW clock_time()
 	
-	char* timestr( int seconds ){
-        static char str[30];
-        int h = seconds / 3600;
-        int m = seconds / 60 - h*60;
-        int s = seconds -h*3600 -m*60;
-        sprintf( str, "%.2d:%.2d:%.2d", h, m, s );
-        return str; }
+	#include "threads.c"
+	//#include "convolve.c"	
 
     // ############################################################################################################ //
 	// ########################################## GLOBALS ######################################################### //
@@ -119,6 +82,10 @@
     // ############################################################################################################ //
 	// ########################################## FILTERS ######################################################### //
 	
+	// y[n] = x[n]*h[0] + x[n-1]*h[1] + x[n-2]*h[2]
+	// reverse(h); cursor -= len(h)-1
+	// y[n] = x[n]*h[0] + x[n+1]*h[1]
+	
 	struct op_clear_arg { void *p; int len; };		
 	void op_clear( void *task ){ struct op_clear_arg *t = (struct op_clear_arg *) task;
 		memset( t->p, 0, t->len * sizeof(float) ); }
@@ -138,12 +105,11 @@
     #define ALIGNMENT 32
     
     void set_filter( int out, float *k, int kn, char *kname ){
-        if( map[out].k ) { aligned_free( map[out].k ); map[out].k = 0; }
+        if( map[out].k ) { FREE( map[out].k ); map[out].k = 0; }
 		if( !k ) return;
         map[out].kname = kname;
 		map[out].kn = ( kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
-		map[out].k = aligned_malloc( map[out].kn * sizeof(float) * 8, ALIGNMENT );
-        memset( map[out].k, 0, map[out].kn * sizeof(float) * 8 );
+		map[out].k = MEMA( map[out].kn * sizeof(float) * 8, ALIGNMENT );
         for(int i=0; i<kn; i++) map[out].k[i] = _mm256_broadcast_ss( k +kn -i -1 );
         }
 
@@ -242,7 +208,7 @@
 			cursor = now -ports[0].t0 +ports[0].min -(int)(L*0.66); //-(ports[1].max -ports[1].min)*2;
 			dith_t = now;
 			if( cursor >= 0 ){
-				PRINT("%s init %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); }
+				PRINT("%s init %d \r\n", clock_timestr(), cursor ); }
 		}
 	
 		else {
@@ -268,12 +234,12 @@
 				if( dith_sig < 0 ){
 					cursor += 1;
 					// todo: remove 1 from all stats so dith sig is lower next ime
-					PRINT("%s skipped 1 sample %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor ); 
+					PRINT("%s skipped 1 sample %d \r\n", clock_timestr(), cursor ); 
 					}
 				else {
 					cursor -= 1;
 					// todo: add 1 to all stats so dith sig is bigger next ime
-					PRINT("%s replayed 1 sample %d \r\n", timestr((now -ports[0].t0)/samplerate), cursor );
+					PRINT("%s replayed 1 sample %d \r\n", clock_timestr(), cursor );
 					}
 				dith_t = now;
 			}
@@ -374,16 +340,16 @@
 		samplerate = sr;
 		msize = sr * 3;
 		ssize = sr * 2;
-		canvas = getmem( sizeof(float) * msize * 4 * in );  // 4th is just because the third memcopy may be out
-		ports = getmem( sizeof(struct port) * 2 );
-		map = getmem( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) { map[i].src = -1; map[i].k = 0; }
-		lstat = getmem( sizeof(struct stat) * ssize ); lstat_len = 0;		
-		gstat = getmem( sizeof(struct stat) * ssize ); gstat_len = 0;		
+		canvas = MEM( sizeof(float) * msize * 4 * in );  // 4th is just because the third memcopy may be out
+		ports = MEM( sizeof(struct port) * 2 );
+		map = MEM( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) map[i].src = -1;
+		lstat = MEM( sizeof(struct stat) * ssize ); lstat_len = 0;		
+		gstat = MEM( sizeof(struct stat) * ssize ); gstat_len = 0;		
 		ports[0].channels_count = in;
-		ports[0].stats = getmem( sizeof(struct stat) * ssize );
+		ports[0].stats = MEM( sizeof(struct stat) * ssize );
 		ports[1].type = 1;
 		ports[1].channels_count = on;
-		ports[1].stats = getmem( sizeof(struct stat) * ssize );
+		ports[1].stats = MEM( sizeof(struct stat) * ssize );
 		clock_init( sr );
 		threads_init( tc ); jobs_per_channel = (int)ceil( ((float)tc)/((float)on) );		
         for( int i=0; i<2; i++ ){						
@@ -435,6 +401,8 @@
     // ########################################## GUI ############################################################# //
     // ############################################################################################################ //
 
+	#include "conf.c"
+
     HWND hwnd;
     MSG msg;
 
@@ -464,11 +432,12 @@
 	// ------------------------------------------------------------------------------------------------------------ //
 
 	void draw();
-    void CALLBACK every_5ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+    void CALLBACK every_10ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+		draw(); }
+	void CALLBACK every_100ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
 		if( console_changed ){
 			console_changed = 0;
-			SetWindowText( hEdit, console ); }
-		draw();
+			SetWindowText( hEdit, console ); }		
         if( cursor > -1 ){
             char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*100.0) );
             SetWindowText( hLL, txt ); } }
@@ -478,8 +447,7 @@
     char * names = 0;
     char * device_name( int device_id ){
         if( !names ){ 
-            names = getmem( Pa_GetDeviceCount() * 200 );
-            memset( names, 0, Pa_GetDeviceCount() * 200 );
+            names = MEM( Pa_GetDeviceCount() * 200 );
             char drv_name[50] = "", dev_name[150] = "";
             for( int i=0; i<Pa_GetDeviceCount(); i++ ){
                 strcpy( dev_name, Pa_GetDeviceInfo( i )->name );
@@ -518,14 +486,14 @@
     void load_filters( int max_len ){  // TODO: open one file only; rm FindFirstFile(); load_filter(i, filename, max_len)
 		if( filters ){
 			for( int i=0; filters[i]; i++ ){
-				free( filters[i]->name );
-				free( filters[i]->k ); }
-			free( filters ); filters = 0; }
-		filters = getmem( sizeof(struct filter *) * 100 );
+				FREE( filters[i]->name );
+				FREE( filters[i]->k ); }
+			FREE( filters ); filters = 0; }
+		filters = MEM( sizeof(struct filter *) * 100 );
 		// add 'None' - unity kernel
-        filters[0] = getmem( sizeof( struct filter ) );
-		filters[0]->name = getmem( 5 ); strcpy( filters[0]->name, "None" );
-        filters[0]->k = getmem( sizeof(float) * 1 );
+        filters[0] = MEM( sizeof( struct filter ) );
+		filters[0]->name = MEM( 5 ); strcpy( filters[0]->name, "None" );
+        filters[0]->k = MEM( sizeof(float) * 1 );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;        
 		// add files
@@ -543,13 +511,13 @@
                 PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, max_len );
                 continue; }
             fseek( f, 0, SEEK_SET );
-            float *data = malloc( sizeof(float) * count );
+            float *data = MEM( sizeof(float) * count );
             for( int j=0; j<count; j++ )
                 fscanf( f, "%f", data +j );
             fclose(f);
             // push to list
-            filters[i] = getmem( sizeof( struct filter ) );
-            filters[i]->name = getmem( strlen( fname )+1 );
+            filters[i] = MEM( sizeof( struct filter ) );
+            filters[i]->name = MEM( strlen( fname )+1 );
             strcpy( filters[i]->name, r.cFileName );
             filters[i]->k = data;
             filters[i]->kn = count;
@@ -636,7 +604,7 @@
         PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
         DWORD returnLength = 0;
         glpi( buffer, &returnLength );
-        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) getmem( returnLength );
+        buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) MEM( returnLength );
         BOOL r = glpi( buffer, &returnLength );
         if( !r ) { return 1; } // ???
         ptr = buffer;
@@ -704,16 +672,15 @@
                     for( int i=0; i<ports[1].channels_count; i++ ){
                         if( i < 10 ){
                             EnableWindow( cbs[i], 1 );
-                            for( int j=0; j<ports[0].channels_count; j++ ){
-                                char key[6]; int val;
-                                sprintf( key, "out%d", i+1 );
-                                if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
-                                    map[i].src = val-1;
-                                sprintf( key, "filter%d", i+1 );
-                                if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
-									struct filter *fl = filter_p( conf_get( key ) );
-                                    set_filter( i, fl->k, fl->kn, fl->name );
-                                    SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } }
+							char key[6]; int val;
+							sprintf( key, "out%d", i+1 );
+							if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+								map[i].src = val-1;
+							sprintf( key, "filter%d", i+1 );
+							if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
+								struct filter *fl = filter_p( conf_get( key ) );
+								set_filter( i, fl->k, fl->kn, fl->name );
+								SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } 
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
                             EnableWindow( cbs2[i], 1 ); } }
                     }
@@ -724,11 +691,11 @@
                 GetDlgItemText( hwnd, CB1+out, txt, 20 );      
 				if( txt[0] == 0 ){
 					map[out].src = -1;
-                    PRINT( "%s out %d: removed source \r\n", timestr(NOW/samplerate), out+1 );
+                    PRINT( "%s out %d: removed source \r\n", clock_timestr(), out+1 );
 				}else {
 					int chan = txt[0]-48-1;
 					map[out].src = chan;
-					PRINT( "%s out %d: set source %d \r\n", timestr(NOW/samplerate), out+1, chan+1 );
+					PRINT( "%s out %d: set source %d \r\n", clock_timestr(), out+1, chan+1 );
 			    }
 
                 
@@ -738,11 +705,11 @@
 				GetDlgItemText( hwnd, CB2+out, txt, 100 );
 				if( txt[0] == 0 ){
 					set_filter( out, 0, 0, 0 );
-					PRINT( "%s out %d: removed filter \r\n", timestr(NOW/samplerate), out );
+					PRINT( "%s out %d: removed filter \r\n", clock_timestr(), out );
 				} else {
 					struct filter *fl = filter_p( txt );
 					set_filter( out, fl->k, fl->kn, fl->name );            
-					PRINT( "%s out %d: set filter %s \r\n", timestr(NOW/samplerate), out, txt );                
+					PRINT( "%s out %d: set filter %s \r\n", clock_timestr(), out, txt );                
 				}
             }
         }
@@ -973,7 +940,8 @@
 		} else SendMessage( hr1, BM_CLICK, 0, 0 );
 		
 		draw_prepare();		
-		SetTimer( 0, 0, 5, (TIMERPROC) &every_5ms );
+		SetTimer( 0, 0, 10, (TIMERPROC) &every_10ms );
+		SetTimer( 0, 0, 100, (TIMERPROC) &every_100ms );
 
         // loop
         while( GetMessage( &msg, 0, 0, 0 ) > 0 ){

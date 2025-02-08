@@ -18,9 +18,12 @@
 	
 	// TODO: when wrapped its more than CONSOLE_HEIGHT
 	// TODO: mode without wrapping
-	
+	// TOOD: remove wrapping too complicated for no gain
+	// TODO: rm init - if static initialilzed
+    // TODO: when printing a single cahracter does nothing sometimes
+
 	#define CONSOLE_WIDTH 80
-	#define CONSOLE_HEIGHT 16
+	#define CONSOLE_HEIGHT 15
 	#define CONSOLE_SIZE (CONSOLE_WIDTH*CONSOLE_HEIGHT)
 
 	volatile char volatile *console;

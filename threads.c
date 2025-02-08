@@ -10,6 +10,7 @@
 
 	// TODO: track queue usage %/MB = (head > tail) ? (head-tail)/20MB : (tail-head)/20MB; notify on failure
 	// TODO: use auto reset events to wake single
+	// TODO: multiple pools; init returns instance; submit takes self
 
 	#include <stdlib.h>   // memcpy
 	#include <windows.h>  // CreateThread, CreateMutex, CreateEvent, WaitForSingleObject, SetEvent, ReleaseMutex, ResetEvent, HANDLE
