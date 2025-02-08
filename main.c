@@ -451,6 +451,7 @@
             if( count == 0 ) continue;
             if( count > max_len ){
                 PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, max_len );
+				fclose(f);
                 continue; }
             fseek( f, 0, SEEK_SET );
             float *data = MEM( sizeof(float) * count );

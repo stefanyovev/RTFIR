@@ -10,7 +10,6 @@ Todos:
 		- padded default filter should produce the same as memcopy
 		- visual analyzer
 
- - generate filters
  - filters/44100/name.txt
  - show conf shows 0-1.txt on non existing channels at boot when used an old conf.
 
