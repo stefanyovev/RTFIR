@@ -1,17 +1,17 @@
 
 main.ico ICON "main.ico"
 1 VERSIONINFO
-FILEVERSION     2025,2,3,0
+FILEVERSION     2025,2,9,0
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
     BLOCK "080904E4"
     BEGIN      
       VALUE "ProductName", "RTFIR"
-      VALUE "ProductVersion", "10"
+      VALUE "ProductVersion", "13"
       VALUE "LegalCopyright", "RTFIR.com"
       VALUE "OriginalFilename", "RTFIR.exe"
-      VALUE "FileDescription", "Realtime Sound EQ"
+      VALUE "FileDescription", "RTFIR"
     END
   END
   BLOCK "VarFileInfo"
