@@ -4,6 +4,22 @@
 	// reverse(h); cursor -= len(h)-1
 	// y[n] = x[n]*h[0] + x[n+1]*h[1]
 	
+	// TODO: fix that last sample. from original code
+	// TODO: dummy convolve_naive
+
+	#if __INCLUDE_LEVEL__ == 0
+		#include <stdint.h>
+		#include <immintrin.h>	
+		#include <windows.h>
+		#define ERROR(x) { MessageBox( GetActiveWindow(), x, "ERROR", MB_OK ); exit(1); }
+		#include "mem.c"
+		#define MEM(x) mem_alloc(x)
+		#define MEMA(x,y) mem_alloc_aligned(x,y)
+		#define FREE(x) mem_free(x)
+		#include <stdio.h>
+		#define PRINT printf
+	#endif
+	
 	struct convolve_kernel {
 		char *name;
 		int len;
@@ -57,7 +73,26 @@
                         acc1 = _mm256_fmadd_ps(kernel[k+l+m], data_block, acc1); } } }
             _mm256_storeu_ps(out+i, acc0);
             _mm256_storeu_ps(out+i+AVX_SIMD_LENGTH, acc1); }
+		/*
         int i = length - kernel_length;
         out[i] = 0.0;
-        for(int k=0; k<kernel_length; k++){
-            out[i] += in[i+k] * (*((float*)(kernel +k ))); } }  
+        for(int k=0; k<kernel_length; k++)
+            out[i] += in[i+k] * (*((float*)(kernel +k )));
+		*/
+		}  
+
+    #undef ALIGNMENT
+    #undef SSE_SIMD_LENGTH
+    #undef AVX_SIMD_LENGTH
+    #undef VECTOR_LENGTH
+
+
+
+//  gcc -w convolve.c -fpermissive -o cvl -march=native -O3
+
+#if __INCLUDE_LEVEL__ == 0
+	
+	int main( int, int ){
+		}
+	
+#endif

@@ -217,7 +217,7 @@
             int ofs = ports[0].len % msize;
             for( int i=0; i<ports[0].channels_count; i++ )
                 for( int j=0; j<3; j++ )
-                    memcpy( canvas +i*msize*3 +j*msize +ofs, input[i], frameCount*sizeof(float) );
+                    memcpy( canvas +i*msize*4 +j*msize +ofs, input[i], frameCount*sizeof(float) );
 				
             ports[0].len += frameCount;			
 			_makestat( ports ); }
@@ -244,13 +244,13 @@
 					else if( cursor >= 0 && map[i].src >= 0 && !map[i].k ){
 						// copy
 						copy_task.dst = output[i] +j*jlen;
-						copy_task.src = canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen;
+						copy_task.src = canvas + map[i].src*msize*4 +msize + cursor%msize +j*jlen;
 						copy_task.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
 						threads_submit( &op_copy, &copy_task, sizeof(copy_task)  );
 					}
 					else {
 						// convolve
-						T.in = canvas + map[i].src*msize*3 +msize + cursor%msize +j*jlen;
+						T.in = canvas + map[i].src*msize*4 +msize + cursor%msize +j*jlen;
 						T.out = output[i] +j*jlen;
 						T.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
 						T.k = map[i].k;
