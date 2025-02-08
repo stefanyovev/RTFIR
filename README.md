@@ -1,5 +1,7 @@
-Realtime Sound Crossover for Windows
-
+Realtime Sound Crossover for Windows   
+    
+![screenshot](https://rtfir.com/screenshot4.png)   
+   
 Todos:
  
  - find out why default filter differs from memcopy / slightly displaced / lowpass pops
