@@ -4,11 +4,7 @@ Realtime Sound Crossover for Windows
 
 Todos:
 
-- convolve:
-	- the last sample
-	- tests
-		- padded default filter should produce the same as memcopy
-		- visual analyzer
+- convolve: test with visual analyzer/audacity
 
 - filters/44100/name.txt
 - show conf shows 0-1.txt on non existing channels at boot when used an old conf.
