@@ -14,9 +14,9 @@
 		#define PRINT printf
 		#define ERROR(x) { PRINT(x); exit(1); }
 		#include "mem.c"
-		#define MEM(x) mem_alloc(x)
-		#define MEMA(x,y) mem_alloc_aligned(x,y)
-		#define FREE(x) mem_free(x)
+		#define MEM mem_alloc
+		#define MEMA mem_alloc_aligned
+		#define FREE mem_free
 	#endif
 
 	struct convolve_kernel {

@@ -14,7 +14,7 @@
 		int type;  // 0/1 - in/out
 		int stage;  // 0 -initial; 1 -200ms passed
 		int channels_count;
-        int64_t t0;
+		int64_t t0;
 		int64_t len;
 		struct stat *stats;  // now to end-of-data
 		int64_t min, max;
@@ -28,7 +28,7 @@
 		}; 
 
 
-    // ------------------------------------------------------------------------------------------------------------ //
+	// ------------------------------------------------------------------------------------------------------------ //
 
 
 	int samplerate;
@@ -242,7 +242,7 @@
 			_makestat( ports+1 );
 			}
 
-        return paContinue; }
+		return paContinue; }
 
 
 	int init(){
