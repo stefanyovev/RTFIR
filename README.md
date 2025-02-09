@@ -1,6 +1,6 @@
 Realtime Sound Crossover for Windows   
     
-![screenshot](https://rtfir.com/screenshot4.png)   
+![screenshot](https://rtfir.com/screenshot5.png)   
    
 Todos:
  
