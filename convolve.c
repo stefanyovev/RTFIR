@@ -5,19 +5,18 @@
 	// y[n] = x[n]*h[0] + x[n+1]*h[1]
 	
 	// TODO: fix that last sample. from original code
-	// TODO: dummy convolve_naive
+	// TODO: convolve_naive
 
 	#if __INCLUDE_LEVEL__ == 0
+		#include <stdio.h>
 		#include <stdint.h>
 		#include <immintrin.h>	
-		#include <windows.h>
-		#define ERROR(x) { MessageBox( GetActiveWindow(), x, "ERROR", MB_OK ); exit(1); }
+		#define PRINT printf
+		#define ERROR(x) { PRINT(x); exit(1); }
 		#include "mem.c"
 		#define MEM(x) mem_alloc(x)
 		#define MEMA(x,y) mem_alloc_aligned(x,y)
 		#define FREE(x) mem_free(x)
-		#include <stdio.h>
-		#define PRINT printf
 	#endif
 	
 	struct convolve_kernel {
