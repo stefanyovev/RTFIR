@@ -368,7 +368,7 @@
 		SelectObject( hdcMem, GetStockObject(DC_PEN) );		
 		if( ports && ports[0].stats_len && ports[1].stats_len ){
 
-			int now = NOW;
+			int now = NOW();
 			
 			// move view
 			///*

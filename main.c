@@ -12,15 +12,15 @@
 	#define ERROR(x) { MessageBox( GetActiveWindow(), x, "ERROR", MB_OK ); exit(1); }
 
 	#include "mem.c"
-	#define MEM(x) mem_alloc(x)
-	#define MEMA(x,y) mem_alloc_aligned(x,y)
-	#define FREE(x) mem_free(x)
+	#define MEM mem_alloc
+	#define MEMA mem_alloc_aligned
+	#define FREE mem_free
 
 	#include "console.c"
 	#define PRINT console_print
 
 	#include "clock.c"
-	#define NOW clock_time()
+	#define NOW clock_time
 	
 	#include "threads.c"
 	#include "convolve.c"
