@@ -61,7 +61,11 @@
 
 
 	void set_filter( int out, float *k, int kn, char *kname ){
-		if( map[out].k ) { FREE( map[out].k ); map[out].k = 0; }
+		if( map[out].k ) {
+			struct convolve_kernel *old = map[out].k;
+			map[out].k = 0;
+			threads_wait();
+			convolve_kernel_free( old ); }
 		if( !k ) return;
 		map[out].k = convolve_kernel_new( kname, k, kn ); }
 

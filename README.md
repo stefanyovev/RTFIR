@@ -4,10 +4,7 @@ Realtime Sound Crossover for Windows
 
 Todos:
 
-- convolve: test with visual analyzer/audacity
-
 - filters/44100/name.txt
-- show conf shows 0-1.txt on non existing channels at boot when used an old conf.
 
 - timing:
 	- startup seq.
@@ -16,6 +13,7 @@ Todos:
 	- average ports min/max (because it suddenly changes)
 
 - code:
+	- frontend as object; create, add_device.. mainloop
 	- modules: include or link; private, public, symbols; .h/.c/.o; init, self, instances
 	- threadpool object; return instance; threads_submit( self, f, arg, argsize )  (NOTE)
 	- device objects; generate names; hide portaudio from frontend	

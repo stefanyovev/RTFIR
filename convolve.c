@@ -34,11 +34,27 @@
 		struct convolve_kernel *R = MEM( sizeof( struct convolve_kernel ) );
 		R->name = MEM( strlen( name )+1 );
 		strcpy( R->name, name );
-		R->len = ( kn / 32 ) * 32 + 32; // filter len multiple of 32 samples
+		R->len = ( kn / 16 ) * 16 + 16; // filter len multiple of 16 samples
 		R->data = MEMA( R->len * sizeof(float) * 8, ALIGNMENT );
 		for( int i=0; i<kn; i++ )
 			R->data[ R->len-kn +i] = _mm256_broadcast_ss( k +kn-1 -i );
 		return R; }
+	
+	void convolve_kernel_free( struct convolve_kernel *k ){
+		FREE( k->name );
+		FREE( k->data );
+		FREE( k ); }
+
+	void convolve_naive( void *task ){
+		float *x = ((struct convolve_task*)task)->in;
+		float *y = ((struct convolve_task*)task)->out;
+		int length = ((struct convolve_task*)task)->len;
+		__m256* k = ((struct convolve_task*)task)->k->data;
+		int kn = ((struct convolve_task*)task)->k->len;		
+		for( int i=0; i<length; i++ ){
+			y[i] = 0;			
+			for( int j=0; j<kn; j++ )
+				y[i] += x[i-kn+j+1] * ( *( (float*)(k+j) ) ); } }
 
 	#define SSE_SIMD_LENGTH 4
 	#define AVX_SIMD_LENGTH 8
@@ -78,11 +94,14 @@
 
 
 
-//  gcc -w convolve.c -fpermissive -o cvl -march=native -O3 && ./cvl
+// gcc -w convolve.c -fpermissive -o cvl -march=native -O3 && ./cvl
 
 #if __INCLUDE_LEVEL__ == 0
 
 	/*
+	// -----------------------------------------------------------------------------------------------
+	// --- TEST vector read write ---
+	
 	int main( int, int ){
 		float v = 0.5;
 		__m256 m =  _mm256_broadcast_ss( &v );
@@ -91,7 +110,12 @@
 		PRINT( "%.2f \r\n", *( (float*)&m ) ); // 0.5
 		PRINT( "%.2f \r\n", *( (float*)&m +7 ) ); // 0.5
 		}
+	// -----------------------------------------------------------------------------------------------
 	*/
+	
+	/*
+	// -----------------------------------------------------------------------------------------------
+	// --- TEST convolution visually; test if splitting results the same as one block ---
 	
 	void print_floats( float* k, int len ){
 		for( int i=0; i<len; i++ ){
@@ -166,5 +190,57 @@
 		PRINT( "\r\n" );
 
 	}
+	*/
+
+	// -----------------------------------------------------------------------------------------------
+	// --- TEST if 4 blocks 'convolve' is the same as 1 block 'convolve_naive' ---
+	
+	void fill_floats( float *p, int n ){
+		for( int i=0; i<n; i++ )
+			*p = rand() % 10; }
+	
+	void compare_floats( float *a, float *b, int n ){
+		for( int i=0; i<n; i++ )
+			if( *a == *b ) PRINT( "." );
+			else PRINT( "X" ); }
+	
+	int main( int, int ){
+		
+		#define HLEN 32
+		#define SLEN 96
+		
+		float *h = MEM( sizeof(float)*HLEN );
+		float *x = MEM( sizeof(float)*SLEN );
+		float *y1 = MEM( sizeof(float)*SLEN );
+		float *y2 = MEM( sizeof(float)*SLEN );
+
+		fill_floats( h, SLEN );
+		fill_floats( x, SLEN );
+		
+		struct convolve_kernel
+			*k = convolve_kernel_new( "H", h, HLEN );
+
+		struct convolve_task T;
+		
+		T.k = k;
+		T.in = x + 32;
+		T.out = y1 + 32;
+		T.len = 64;
+		convolve_naive( &T );
+		T.out = y2 + 32;
+		convolve( &T );
+		compare_floats( y1, y2, SLEN );
+		
+		// ------------------------------------------
+		memset( y2, 0, sizeof(float)*SLEN );
+		for( int i=0; i<4; i++ ){
+			T.in = x + 32 + i*16;
+			T.out = y2 + 32 + i*16;
+			T.len = 16;
+			convolve( &T ); }
+		compare_floats( y1, y2, SLEN );
+		
+	}
+	// -----------------------------------------------------------------------------------------------
 
 #endif
