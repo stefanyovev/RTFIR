@@ -12,7 +12,7 @@ SET_OPTION(PA_USE_WMME OFF)
 
 add_subdirectory(portaudio)
 
-add_compile_options(-std=c99 -march=native -O3 -msse3 -mavx -fno-aggressive-loop-optimizations -fPIC -fpermissive -w)
+add_compile_options(-std=c99 -march=native -O3 -fPIC -fpermissive -w)
 add_executable(RTFIR main.c main.rc)
 target_link_libraries(RTFIR PortAudio synchronization gdi32 stdc++ -mwindows -static)
 

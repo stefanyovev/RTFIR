@@ -135,7 +135,7 @@
         if( i == 1 )
             PRINT( "No filters found in folder filters\\%d. \r\n", samplerate );
         else
-            PRINT( "loaded %d filters \r\n", i-1 );
+            PRINT( "Loaded %d filters \r\n", i-1 );
     }
 
     // ------------------------------------------------------------------------------------------------------------ //
@@ -458,8 +458,8 @@
         wc.hCursor = LoadCursor( 0, IDC_ARROW );
         wc.hIcon = LoadIcon(hInstance, "main.ico");
         RegisterClassEx(&wc);
-		
-		// fonts
+        
+        // fonts
         strcpy(font1.lfFaceName, "Wingdings");
         font1.lfCharSet = DEFAULT_CHARSET;
         hfont1 = CreateFontIndirect(&font1);
@@ -476,8 +476,8 @@
         font4.lfHeight = 13;
         hfont4 = CreateFontIndirect(&font4);    
 
-		// create
-		hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );        
+        // create
+        hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );        
         hr1 = CreateWindowEx( 0, "Button", "44.1k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON|WS_GROUP, 70, 10, 50, 23, hwnd, R1, 0, 0);
         hr2 = CreateWindowEx( 0, "Button", "48k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 160, 10, 50, 23, hwnd, R2, 0, 0);
         hr3 = CreateWindowEx( 0, "Button", "96k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 230, 10, 50, 23, hwnd, R3, 0, 0);
@@ -488,7 +488,7 @@
         hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
         hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
         hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
-		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hwnd, EDT, NULL, NULL);
+        hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hwnd, EDT, NULL, NULL);
 
         SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
         SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -504,15 +504,15 @@
 
         for( int i=0; i<10; i++ ){        
             char str[7]; HANDLE h;
-            sprintf( str, "out %d", i+1 );
-            h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 50, 135+i*30, 50, 15, hwnd, LB1+i, NULL, NULL);
+            sprintf( str, "Out%d   %ssrc", i+1, i+1==10 ? "  " : "    " );
+            h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 49, 133+i*30, 80, 15, hwnd, LB1+i, NULL, NULL);
             SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-            cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 100, 130+i*30, 90, 800, hwnd, CB1+i, NULL, NULL);
+            cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 127, 130+i*30, 50, 800, hwnd, CB1+i, NULL, NULL);
             SendMessageA( cbs[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             EnableWindow( cbs[i], 0 );            
-            h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 220, 135+i*30, 50, 15, hwnd, LB1+10+i, NULL, NULL);
+            h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 202, 133+i*30, 50, 15, hwnd, LB1+10+i, NULL, NULL);
             SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-            cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 260, 130+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);
+            cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 235, 130+i*30, 150, 800, hwnd, CB2+i, NULL, NULL);
             SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             EnableWindow( cbs2[i], 0 ); }
 
@@ -520,7 +520,7 @@
 
         // init
         console_init();
-        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
+        PRINT( "Built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
         init();
         conf_load( "RTFIR.conf" );
 
