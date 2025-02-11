@@ -4,9 +4,6 @@
 
 	#include "conf.c"
 
-    HWND hwnd;
-    MSG msg;
-
     #define R1 (1)
     #define R2 (2)
     #define R3 (3)
@@ -22,28 +19,31 @@
     #define CB2 (330)
     #define EDT (400)
 
+    HWND hwnd;
+    MSG msg;
+    
     HWND hr1, hr2, hr3, hr4, hLL, hbctl1, hbctl2, hCombo1, hCombo2, hBtn;
     HWND cbs[10];
     HWND cbs2[10];
     HWND hEdit;
 
-    LOGFONT font1 = {0}, font2 = {0}, font3 = {0}, font4 = {0};
     HFONT hfont1, hfont2, hfont3, hfont4;
+    LOGFONT font1 = {0}, font2 = {0}, font3 = {0}, font4 = {0};
 
-	// ------------------------------------------------------------------------------------------------------------ //
+    // ------------------------------------------------------------------------------------------------------------ //
 
-	void draw();
+    void draw();
     void CALLBACK every_10ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		draw(); }
-	void CALLBACK every_100ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		if( console_changed ){
-			console_changed = 0;
-			SetWindowText( hEdit, console ); }		
+        draw(); }
+    void CALLBACK every_100ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+        if( console_changed ){
+            console_changed = 0;
+            SetWindowText( hEdit, console ); }		
         if( cursor > -1 ){
             char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*100.0) );
             SetWindowText( hLL, txt ); } }
 
-	// ------------------------------------------------------------------------------------------------------------ //
+    // ------------------------------------------------------------------------------------------------------------ //
 
     char * names = 0;
     char * device_name( int device_id ){
@@ -66,6 +66,7 @@
 
     struct filter {
         char *name;
+        int samplerate;
         float* k;
         int kn; 
     };
@@ -84,33 +85,38 @@
                 return i;
         return -1; }
 
-    void load_filters( int max_len ){  // TODO: open one file only; rm FindFirstFile(); load_filter(i, filename, max_len)
-		if( filters ){
-			for( int i=0; filters[i]; i++ ){
-				FREE( filters[i]->name );
-				FREE( filters[i]->k ); }
-			FREE( filters ); filters = 0; }
-		filters = MEM( sizeof(struct filter *) * 100 );
-		// add 'None' - unity kernel
+    void load_filters( int samplerate ){
+        if( filters ){
+            for( int i=0; filters[i]; i++ ){
+                FREE( filters[i]->name );
+                FREE( filters[i]->k ); }
+            FREE( filters ); filters = 0; }
+        filters = MEM( sizeof(struct filter *) * 100 );
+        // add 'None' - unity kernel
         filters[0] = MEM( sizeof( struct filter ) );
-		filters[0]->name = MEM( 5 ); strcpy( filters[0]->name, "None" );
+        filters[0]->name = MEM( 5 ); strcpy( filters[0]->name, "None" );
         filters[0]->k = MEM( sizeof(float) * 1 );
         filters[0]->k[0] = 1.0;
         filters[0]->kn = 1;        
-		// add files
+        // add files
+        char folder[30] = ""; sprintf( folder, "filters\\%d\\*", samplerate );
         WIN32_FIND_DATA r;
-        HANDLE h = FindFirstFile( "filters\\*", &r ); if( h == INVALID_HANDLE_VALUE ) return;
+        HANDLE h = FindFirstFile( folder, &r );
+        if( h == INVALID_HANDLE_VALUE ){
+            PRINT( "Folder filters\\%d does not exist. \r\n", samplerate );
+            return;
+            }
         int i = 1;
         do if( !(r.dwFileAttributes&FILE_ATTRIBUTE_DIRECTORY) && r.cFileName[0] != '.' ){
-            char fname[100] = ""; sprintf( fname, "filters\\%s", r.cFileName );
+            char fname[100] = ""; sprintf( fname, "filters\\%d\\%s", samplerate, r.cFileName );
             FILE *f = fopen( fname, "r" );
             if( !f ) continue;
             int count = 0;
             float num; while( fscanf( f, "%f", &num ) == 1 ) count ++;
             if( count == 0 ) continue;
-            if( count > max_len ){
-                PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, max_len );
-				fclose(f);
+            if( count > samplerate ){
+                PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, samplerate );
+                fclose(f);
                 continue; }
             fseek( f, 0, SEEK_SET );
             float *data = MEM( sizeof(float) * count );
@@ -126,10 +132,13 @@
             i++;
         } while( FindNextFile( h, &r ) );
         FindClose(h);
-        PRINT( "loaded %d filters \r\n", i-1 );
+        if( i == 1 )
+            PRINT( "No filters found in folder filters\\%d. \r\n", samplerate );
+        else
+            PRINT( "loaded %d filters \r\n", i-1 );
     }
 
-	// ------------------------------------------------------------------------------------------------------------ //
+    // ------------------------------------------------------------------------------------------------------------ //
 
     int devices_as_in_conf(){ // whether the two devices selected are as in the conf
         char a[250], b[250];
@@ -145,30 +154,30 @@
 
     void show_conf(){ // sets the bottom combos as in conf or clear them; routing if devices are same and filters if devs&SR are same
 
-		// fill left combos
-		char txt1[250], txt2[250];
-		GetDlgItemText( hwnd, CMB1, txt1, 250 );
-		GetDlgItemText( hwnd, CMB2, txt2, 250 );
-		for( int i=0; i<Pa_GetDeviceInfo( device_id( txt2 ) )->maxOutputChannels; i++ ){
-			SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
-			SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
-			SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
-			for( int j=0; j<Pa_GetDeviceInfo( device_id( txt1 ) )->maxInputChannels; j++ ){
-				char n[3]; sprintf( n, "%d", j+1 );
-				SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } }
+        // fill left combos
+        char txt1[250], txt2[250];
+        GetDlgItemText( hwnd, CMB1, txt1, 250 );
+        GetDlgItemText( hwnd, CMB2, txt2, 250 );
+        for( int i=0; i<Pa_GetDeviceInfo( device_id( txt2 ) )->maxOutputChannels; i++ ){
+            SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+            SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
+            SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+            for( int j=0; j<Pa_GetDeviceInfo( device_id( txt1 ) )->maxInputChannels; j++ ){
+                char n[3]; sprintf( n, "%d", j+1 );
+                SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)n ); } }
 
-		// fill right combos
-		for( int i=0; i<10; i++ ){
-			SendMessage( cbs2[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
-			SendMessage( cbs2[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
-			for( int j=0; filters[j]; j++ ) SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j]->name );
-			SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
-			
+        // fill right combos
+        for( int i=0; i<10; i++ ){
+            SendMessage( cbs2[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
+            SendMessage( cbs2[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
+            for( int j=0; filters[j]; j++ ) SendMessage( cbs2[i], CB_ADDSTRING, 0, filters[j]->name );
+            SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
+            
         if( !devices_as_in_conf() ){ // clear selections
             for( int i=0; i<10; i++ ){
                 SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
                 SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); }
-			return;
+            return;
             }
 
         char key[20]; int val;
@@ -223,14 +232,14 @@
 
             if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) <= R4 ){  // samplerate clicked
 
-				switch( LOWORD(wParam) ){
+                switch( LOWORD(wParam) ){
                     case R1: samplerate = 44100; break;
                     case R2: samplerate = 48000; break;
                     case R3: samplerate = 96000; break;
                     case R4: samplerate = 192000; }
-					
-				load_filters( samplerate ); // maxlen 1s
-				show_conf();
+
+                load_filters( samplerate );
+                show_conf();
 
             } else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){  //  config device clicked
                 char txt[250];
@@ -248,10 +257,10 @@
                     CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
             } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
-				show_conf();
-				
+                show_conf();
+                
             } else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){  // device 2 changed
-				show_conf();
+                show_conf();
                 
             } else if( LOWORD(wParam) == BTN1 ){  // play clicked
                 int sd, dd;
@@ -270,19 +279,19 @@
                     EnableWindow( hCombo1, 0 );
                     EnableWindow( hCombo2, 0 );
                     EnableWindow( hBtn, 0 );
-					show_conf();
+                    show_conf();
                     for( int i=0; i<ports[1].channels_count; i++ ){
                         if( i < 10 ){
                             EnableWindow( cbs[i], 1 );
-							char key[6]; int val;
-							sprintf( key, "out%d", i+1 );
-							if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
-								map[i].src = val-1;
-							sprintf( key, "filter%d", i+1 );
-							if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
-								struct filter *fl = filter_p( conf_get( key ) );
-								set_filter( i, fl->k, fl->kn, fl->name );
-								SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } 
+                            char key[6]; int val;
+                            sprintf( key, "out%d", i+1 );
+                            if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
+                                map[i].src = val-1;
+                            sprintf( key, "filter%d", i+1 );
+                            if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
+                                struct filter *fl = filter_p( conf_get( key ) );
+                                set_filter( i, fl->k, fl->kn, fl->name );
+                                SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } 
                             SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
                             EnableWindow( cbs2[i], 1 ); } }
                     }
@@ -291,28 +300,28 @@
                 int out = LOWORD(wParam) - CB1;                
                 char  txt[20];
                 GetDlgItemText( hwnd, CB1+out, txt, 20 );      
-				if( txt[0] == 0 ){
-					map[out].src = -1;
+                if( txt[0] == 0 ){
+                    map[out].src = -1;
                     PRINT( "%s out %d: removed source \r\n", clock_timestr(), out+1 );
-				}else {
-					int chan = txt[0]-48-1;
-					map[out].src = chan;
-					PRINT( "%s out %d: set source %d \r\n", clock_timestr(), out+1, chan+1 );
-			    }
+                }else {
+                    int chan = txt[0]-48-1;
+                    map[out].src = chan;
+                    PRINT( "%s out %d: set source %d \r\n", clock_timestr(), out+1, chan+1 );
+                }
 
                 
             } else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){                
                 int out = LOWORD(wParam) - CB2;                
                 char txt[100];
-				GetDlgItemText( hwnd, CB2+out, txt, 100 );
-				if( txt[0] == 0 ){
-					set_filter( out, 0, 0, 0 );
-					PRINT( "%s out %d: removed filter \r\n", clock_timestr(), out );
-				} else {
-					struct filter *fl = filter_p( txt );
-					set_filter( out, fl->k, fl->kn, fl->name );            
-					PRINT( "%s out %d: set filter %s \r\n", clock_timestr(), out, txt );                
-				}
+                GetDlgItemText( hwnd, CB2+out, txt, 100 );
+                if( txt[0] == 0 ){
+                    set_filter( out, 0, 0, 0 );
+                    PRINT( "%s out %d: removed filter \r\n", clock_timestr(), out );
+                } else {
+                    struct filter *fl = filter_p( txt );
+                    set_filter( out, fl->k, fl->kn, fl->name );            
+                    PRINT( "%s out %d: set filter %s \r\n", clock_timestr(), out, txt );                
+                }
             }
         }
 
@@ -325,17 +334,17 @@
 
         return DefWindowProc( hwnd, msg, wParam, lParam ); }
 
-	// ---------------------------- draw ------------------------------------------------------
-	HDC hdc, hdcMem;
-	RECT rc;
-	HBITMAP hbmp;
-	void ** pixels;
+    // ---------------------------- draw ------------------------------------------------------
+    HDC hdc, hdcMem;
+    RECT rc;
+    HBITMAP hbmp;
+    void ** pixels;
     int VPw = 40000;        // ViewPort width
     int VPh = 2500;        // ViewPort height
     int VPx = 0;           // ViewPort pos x corner
     int VPy = 0;           // ViewPort pos y corner
-	POINT points[192000*2];
-	void draw_prepare(){
+    POINT points[192000*2];
+    void draw_prepare(){
         BITMAPINFO bmi;
         memset( &bmi, 0, sizeof(bmi) );
         bmi.bmiHeader.biSize = sizeof(bmi);
@@ -350,95 +359,95 @@
         SelectObject( hdcMem, hbmp );
         SetBkMode( hdcMem, TRANSPARENT ); }
     void transform_point( POINT *p ){
-		double Qw = ((double)200)/((double)VPw);
+        double Qw = ((double)200)/((double)VPw);
         double Qh = ((double)200)/((double)VPh);        
         p->x = (long)round( (p->x - VPx) * Qw );
         p->y = (long)round( (p->y - VPy) * Qh );
         p->y = 200 - p->y; }
     void place_marker( int val, COLORREF c ){
-		POINT p1 = { VPx, val };
-		POINT p2 = { VPx+VPw, val };
-		transform_point( &p1 );
-		transform_point( &p2 );
-		MoveToEx( hdcMem, p1.x, p1.y, 0 );
-		SetDCPenColor(hdcMem, c);
-		LineTo( hdcMem, p2.x, p2.y ); }
-	void draw(){
-		memset( pixels, 192, 200*200*4 );
-		SelectObject( hdcMem, GetStockObject(DC_PEN) );		
-		if( ports && ports[0].stats_len && ports[1].stats_len ){
+        POINT p1 = { VPx, val };
+        POINT p2 = { VPx+VPw, val };
+        transform_point( &p1 );
+        transform_point( &p2 );
+        MoveToEx( hdcMem, p1.x, p1.y, 0 );
+        SetDCPenColor(hdcMem, c);
+        LineTo( hdcMem, p2.x, p2.y ); }
+    void draw(){
+        memset( pixels, 192, 200*200*4 );
+        SelectObject( hdcMem, GetStockObject(DC_PEN) );		
+        if( ports && ports[0].stats_len && ports[1].stats_len ){
 
-			int now = NOW();
-			
-			// move view
-			///*
-			if( now + 1000 > ports[0].t0 + VPw ){  // look 1000 samples in future
-				VPx = now + 1000 - VPw; }
-			else { VPx = now - VPw; }			
-			//*/
-			
-			// draw 2 plylines
-			for( int i=0; i<2; i++ ){
-				
-				int bias = (i==0 ? -ports[0].min +(ports[1].max-ports[1].min) : -ports[1].min );
-				
-				if( ports[i].stats_len ){
-					SetDCPenColor(hdcMem, RGB( 199-i*199, i*66 ,0 ) );
-					int pi=0;
-					for( int si=ports[i].stats_len-1; si>=0; si-- ) {
-						points[pi].x = ports[i].stats[si%ssize].t;
-						points[pi].y = ports[i].stats[si%ssize].avail + bias;
-						transform_point( points+pi );
-						if( points[pi].x < 0 ) break;
-						pi ++; }
-					Polyline( hdcMem, points, pi );				
-				}
+            int now = NOW();
+            
+            // move view
+            ///*
+            if( now + 1000 > ports[0].t0 + VPw ){  // look 1000 samples in future
+                VPx = now + 1000 - VPw; }
+            else { VPx = now - VPw; }			
+            //*/
+            
+            // draw 2 plylines
+            for( int i=0; i<2; i++ ){
+                
+                int bias = (i==0 ? -ports[0].min +(ports[1].max-ports[1].min) : -ports[1].min );
+                
+                if( ports[i].stats_len ){
+                    SetDCPenColor(hdcMem, RGB( 199-i*199, i*66 ,0 ) );
+                    int pi=0;
+                    for( int si=ports[i].stats_len-1; si>=0; si-- ) {
+                        points[pi].x = ports[i].stats[si%ssize].t;
+                        points[pi].y = ports[i].stats[si%ssize].avail + bias;
+                        transform_point( points+pi );
+                        if( points[pi].x < 0 ) break;
+                        pi ++; }
+                    Polyline( hdcMem, points, pi );				
+                }
 
-				// and 2 lines
-				//place_marker( ports[0].min+bias, RGB(255, 0,0) );
-				//place_marker( ports[1].max+bias, RGB(0, 99, 0) );
+                // and 2 lines
+                //place_marker( ports[0].min+bias, RGB(255, 0,0) );
+                //place_marker( ports[1].max+bias, RGB(0, 99, 0) );
 
-			}
-		}
+            }
+        }
 
-		if( gstat_len ){
-			SetDCPenColor(hdcMem, RGB(0,0,99));
-			int pi=0;
-			for( int i=gstat_len-1; i>0; i-- ) {
-				points[pi].x = gstat[i%ssize].t;
-				points[pi].y = gstat[i%ssize].avail;
-				transform_point( points+pi );
-				if( points[pi].x < 0 ) break;
-				pi ++; }
-			Polyline( hdcMem, points, pi );
-			place_marker( G, RGB(255,255,00) );
-		}
-		if( lstat_len ){
-			//place_marker( L, RGB(250,50,255) );
-			SetDCPenColor( hdcMem, RGB(255,255,255));
-			int pi=0;
-			for( int i=lstat_len-1; i>0; i-- ) {
-				points[pi].x = lstat[i%ssize].t;
-				points[pi].y = lstat[i%ssize].avail;
-				transform_point( points+pi );
-				if( points[pi].x < 0 ) break;
-				pi ++; }			
-			Polyline( hdcMem, points, pi );
-			
-		}
-		place_marker( 0, RGB(0,0,0) );
-		MoveToEx( hdcMem, 0, 0, 0 );
-		SetDCPenColor(hdcMem, RGB(0,0,0));
-		LineTo( hdcMem, 199, 0 ); LineTo( hdcMem, 199, 199 );
-		LineTo( hdcMem, 0, 199 ); LineTo( hdcMem, 0, 0 );
-		BitBlt( hdc, 382, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
-	}
-	// ----------------------------------------------------------------------------------
-	
+        if( gstat_len ){
+            SetDCPenColor(hdcMem, RGB(0,0,99));
+            int pi=0;
+            for( int i=gstat_len-1; i>0; i-- ) {
+                points[pi].x = gstat[i%ssize].t;
+                points[pi].y = gstat[i%ssize].avail;
+                transform_point( points+pi );
+                if( points[pi].x < 0 ) break;
+                pi ++; }
+            Polyline( hdcMem, points, pi );
+            place_marker( G, RGB(255,255,00) );
+        }
+        if( lstat_len ){
+            //place_marker( L, RGB(250,50,255) );
+            SetDCPenColor( hdcMem, RGB(255,255,255));
+            int pi=0;
+            for( int i=lstat_len-1; i>0; i-- ) {
+                points[pi].x = lstat[i%ssize].t;
+                points[pi].y = lstat[i%ssize].avail;
+                transform_point( points+pi );
+                if( points[pi].x < 0 ) break;
+                pi ++; }			
+            Polyline( hdcMem, points, pi );
+
+        }
+        place_marker( 0, RGB(0,0,0) );
+        MoveToEx( hdcMem, 0, 0, 0 );
+        SetDCPenColor(hdcMem, RGB(0,0,0));
+        LineTo( hdcMem, 199, 0 ); LineTo( hdcMem, 199, 199 );
+        LineTo( hdcMem, 0, 199 ); LineTo( hdcMem, 0, 0 );
+        BitBlt( hdc, 382, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
+    }
+    // ----------------------------------------------------------------------------------
+
 
     int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
 
-		// window class
+        // window class
         WNDCLASSEX wc;
         memset( &wc, 0, sizeof(wc) );
         wc.cbSize = sizeof(wc);
@@ -505,15 +514,15 @@
             SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
             cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 260, 130+i*30, 130, 800, hwnd, CB2+i, NULL, NULL);
             SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-			EnableWindow( cbs2[i], 0 ); }
+            EnableWindow( cbs2[i], 0 ); }
 
         ShowWindow( hwnd, SW_SHOW );
-		
-		// init
-		console_init();
-		PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
-		init();
-		conf_load( "RTFIR.conf" );
+
+        // init
+        console_init();
+        PRINT( "built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
+        init();
+        conf_load( "RTFIR.conf" );
 
         // populate device dropdowns
         for( int i=0, ci; i<Pa_GetDeviceCount(); i++ ){
@@ -531,7 +540,7 @@
         if( SendMessage( hCombo2, CB_GETCURSEL, (WPARAM)0, (LPARAM)0 ) == CB_ERR )
             SendMessage( hCombo2, CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
 
-		// populate samplerate radios
+        // populate samplerate radios
         int samplerate_from_conf = -1;
         if( conf_get( "samplerate" ) && sscanf( conf_get( "samplerate" ), "%d", &samplerate_from_conf ) == 1 ){
             switch( samplerate_from_conf ){
@@ -539,15 +548,15 @@
                 case 48000: SendMessage( hr2, BM_CLICK, 0, 0 ); break;
                 case 96000: SendMessage( hr3, BM_CLICK, 0, 0 ); break;
                 case 192000: SendMessage( hr4, BM_CLICK, 0, 0 ); }
-		} else SendMessage( hr1, BM_CLICK, 0, 0 );
-		
-		draw_prepare();		
-		SetTimer( 0, 0, 10, (TIMERPROC) &every_10ms );
-		SetTimer( 0, 0, 100, (TIMERPROC) &every_100ms );
+        } else SendMessage( hr1, BM_CLICK, 0, 0 );
+        
+        draw_prepare();		
+        SetTimer( 0, 0, 10, (TIMERPROC) &every_10ms );
+        SetTimer( 0, 0, 100, (TIMERPROC) &every_100ms );
 
         // loop
         while( GetMessage( &msg, 0, 0, 0 ) > 0 ){
             TranslateMessage( &msg );
             DispatchMessage( &msg ); }
 
-	return msg.wParam; }
+    return msg.wParam; }

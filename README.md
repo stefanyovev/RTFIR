@@ -4,8 +4,6 @@ Realtime Sound Crossover for Windows
 
 Todos:
 
-- filters/44100/name.txt
-
 - timing:
 	- startup seq.
 		- dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot;
