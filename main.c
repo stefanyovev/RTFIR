@@ -52,7 +52,6 @@ Todos:
 	- QueryUnbiasedInterruptTimePrecise, QuerySystemTimePreciseAsFileTime
 
 - features:
-	- delay
 	- reload filters, saveconf, resetconf buttons; combos==outchans always enabled
 	- filters on inputs
 	- mix

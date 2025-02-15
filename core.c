@@ -220,22 +220,23 @@
 			int rem = frameCount % jobs_per_channel;
 			for( int j = 0; j<jobs_per_channel; j++ )
 				for( int i=0; i<ports[1].channels_count; i++ ){
-					if( cursor < 0 || map[i].src == -1 ){
+					int cursord = cursor -map[i].delay;
+					if( cursord < 0 || map[i].src == -1 ){
 						// clear
 						clear_task.p = output[i] +j*jlen;
 						clear_task.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
 						threads_submit( &op_clear, &clear_task, sizeof(clear_task) );
 					}
-					else if( cursor >= 0 && map[i].src >= 0 && !map[i].k ){
+					else if( cursord >= 0 && map[i].src >= 0 && !map[i].k ){
 						// copy
 						copy_task.dst = output[i] +j*jlen;
-						copy_task.src = canvas + map[i].src*msize*4 +msize + cursor%msize +j*jlen;
+						copy_task.src = canvas + map[i].src*msize*4 +msize + cursord%msize +j*jlen;
 						copy_task.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
 						threads_submit( &op_copy, &copy_task, sizeof(copy_task)  );
 					}
 					else {
 						// convolve
-						T.in = canvas + map[i].src*msize*4 +msize + cursor%msize +j*jlen;
+						T.in = canvas + map[i].src*msize*4 +msize + cursord%msize +j*jlen;
 						T.out = output[i] +j*jlen;
 						T.len = (j == jobs_per_channel-1) ? jlen+rem : jlen;
 						T.k = map[i].k;

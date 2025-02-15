@@ -47,6 +47,7 @@
 			SetWindowText( hLL, txt ); } }
 
 	// ------------------------------------------------------------------------------------------------------------ //
+	// ------------ names ----------------------------------------------------------------------------------------- //
 
 	char * names = 0;
 	char * device_name( int device_id ){
@@ -66,6 +67,7 @@
 		return -1; }
 
 	// ------------------------------------------------------------------------------------------------------------ //
+	// -------------- filter -------------------------------------------------------------------------------------- //
 
 	struct filter {
 		char *name;
@@ -143,6 +145,7 @@
 	}
 
 	// ------------------------------------------------------------------------------------------------------------ //
+	// ----------- conf ------------------------------------------------------------------------------------------- //
 
 	int devices_as_in_conf(){ // whether the two devices selected are as in the conf
 		char a[250], b[250];
@@ -226,6 +229,9 @@
 			}
 		conf_save(); }
 
+	// -------------------------------------------------------------------------------------------------------------- //
+	// ------------------- get_cpu_cores ---------------------------------------------------------------------------- //
+
 	int get_cpu_cores(){
 		typedef BOOL (WINAPI *LPFN_GLPI)( PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);
 		LPFN_GLPI glpi = GetProcAddress( GetModuleHandle("kernel32"), "GetLogicalProcessorInformation");
@@ -246,25 +252,14 @@
 		return processorCoreCount; }
 
 	// -------------------------------------------------------------------------------------------------------------- //
+	// ------------ EditNumber -------------------------------------------------------------------------------------- //
 	
 	int EditNumber_out = -1;
 	static WNDPROC EditNumber_oldproc;
 
 
-	int EditNumber_value(){ // returns -1 on failure
-		char txt[7]; int val;
-		SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
-		if( sscanf( txt, "%d", &val ) == 1 && val > -1 && val <= samplerate )
-			return val;
-		return -1; }
-
-	
-	int EditNumber_value_next( char ch ){
-		// what value would be if we insert ch
-		// at current pos, replacing selection
-		char txt[7];
-		SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
-		
+	int EditNumber_value_next( char ch ){  // what value would be if we insert ch, at current pos, replacing selection
+		char txt[7]; SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );		
 		int sel, selstart, selend;
 		char newtxt[7]; int newval;
 		
@@ -281,33 +276,28 @@
 		
 		//PRINT( " INVALID \"%s\" \r\n", newtxt );
 		return -1;
-		
+
 	}
 
 	LRESULT CALLBACK EditNumber_proc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
 		if( msg == WM_CHAR ){
-			
-			//char txt[7];
-			//SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
 
 			if( wParam == VK_ESCAPE ){
 				EditNumber_rollback();
 				SetFocus( hMain );
 				return 0; }
-			
+
 			if( wParam == VK_RETURN ){
 				EditNumber_commit();
 				return 0; }
 
 			if( wParam != VK_BACK && EditNumber_value_next( wParam ) == -1 ){
-				return 0;
-			}
-			
+				return 0; }
+
 		}
-		
+
 		if( msg == WM_PASTE || msg == WM_CLEAR || msg == WM_CUT ){
-			return 0;
-		}
+			return 0; }
 
 		return CallWindowProc( EditNumber_oldproc, hwnd, msg, wParam, lParam);
 	}
@@ -328,19 +318,20 @@
 	}
 
 	void EditNumber_commit(){
-		char txt[250]; SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 250, txt );
+		char txt[7]; SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
 		//save
 		int val; 
 		if( sscanf( txt, "%d", &val ) == 1 && val > -1 && val <= samplerate ) {
-			PRINT( " SET DELAY out %d delay %d \r\n", EditNumber_out, val );
+			PRINT( "SET DELAY out%d delay %d \r\n", EditNumber_out, val );
 			map[EditNumber_out].delay = val;
 			}
 		// refresh reloading
 		EditNumber_rollback(); 
 		SetFocus( hMain );
 	}
-	
+
 	// -------------------------------------------------------------------------------------------------------------- //
+	// ---------- WNDPROC ------------------------------------------------------------------------------------------- //
 
 	LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
 		if( msg == WM_COMMAND ){
@@ -372,23 +363,22 @@
 					CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
 			} else if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) == BTN4 ){  // print_modified_samples clicked
-				
 				if( IsDlgButtonChecked( hMain, BTN4 ) ){
 					print_modified_samples = 0;
 					CheckDlgButton( hMain, BTN4, BST_UNCHECKED );
-					PRINT( "print_modified_samples OFF \r\n" );
+					PRINT( "print modified samples OFF \r\n" );
 				} else {
 					CheckDlgButton( hMain, BTN4, BST_CHECKED );
 					print_modified_samples = 1;
-					PRINT( "print_modified_samples ON \r\n" );
+					PRINT( "print modified samples ON \r\n" );
 				}
-				
+
 			} else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
 				show_conf();
-				
+
 			} else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){  // device 2 changed
 				show_conf();
-				
+
 			} else if( LOWORD(wParam) == BTN1 ){                                     // play clicked
 				int sd, dd;
 				char txt[250];
@@ -441,11 +431,11 @@
 				GetDlgItemText( hMain, CB1+out, txt, 20 );
 				if( txt[0] == 0 ){
 					map[out].src = -1;
-					PRINT( "%s out %d: removed source \r\n", clock_timestr(), out+1 );
+					PRINT( "REMOVE SOURCE out%d \r\n", out+1 );
 				}else {
 					int chan = txt[0]-48-1;
 					map[out].src = chan;
-					PRINT( "%s out %d: set source %d \r\n", clock_timestr(), out+1, chan+1 );
+					PRINT( "SET SOURCE out%d in%d\r\n", out+1, chan+1 );
 				}
 
 			} else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){  // filter changed
@@ -454,11 +444,11 @@
 				GetDlgItemText( hMain, CB2+out, txt, 100 );
 				if( txt[0] == 0 ){
 					set_filter( out, 0, 0, 0 );
-					PRINT( "%s out %d: removed filter \r\n", clock_timestr(), out );
+					PRINT( "REMOVE FILTER out%d \r\n", out );
 				} else {
 					struct filter *fl = filter_p( txt );
 					set_filter( out, fl->k, fl->kn, fl->name );
-					PRINT( "%s out %d: set filter %s \r\n", clock_timestr(), out, txt );
+					PRINT( "SET FILTER out%d %s \r\n", out, txt );
 				}
 
 			} else if( (LOWORD(wParam) >= CB3) && LOWORD(wParam) <= CB3+10 ){  // delay change
@@ -477,12 +467,9 @@
 		}
 
 		else if( msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN ){
-			
-			if( EditNumber_out > -1 ){
+			if( EditNumber_out > -1 )
 				EditNumber_rollback();
-				SetFocus( hMain ); }
-
-		}
+			SetFocus( hMain ); }
 
 		else if( msg == WM_CTLCOLOREDIT ){
 			int out = GetDlgCtrlID ( lParam ) -CB3;
@@ -502,8 +489,8 @@
 		return DefWindowProc( hwnd, msg, wParam, lParam ); }
 
 
-
-	// ---------------------------- draw ------------------------------------------------------
+	// -------------------------------------------------------------------------------------------------------------- //
+	// ---------------------------- draw ---------------------------------------------------------------------------- //
 	HDC hdc, hdcMem;
 	RECT rc;
 	HBITMAP hbmp;
@@ -611,8 +598,10 @@
 		LineTo( hdcMem, 0, 199 ); LineTo( hdcMem, 0, 0 );
 		BitBlt( hdc, 382, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
 	}
-	// ----------------------------------------------------------------------------------
 
+
+	// ############################################################################################################# //
+	// ############### WINMAIN ##################################################################################### //
 
 	int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR pCmdLine, int nCmdShow ){
 
@@ -660,6 +649,7 @@
 		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hMain, EDT, NULL, NULL);
 		hBtn4 = CreateWindowEx( 0, "Button", "print modified samples", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_CHECKBOX, 15, 435, 150, 23, hMain, BTN4, 0, 0);
 
+		// set fonts
 		SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hr3, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -673,16 +663,21 @@
 		SendMessageA( hBtn4, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont4, (LPARAM)MAKELONG(TRUE, 0));
 
+		// create rows
 		for( int i=0; i<10; i++ ){
-			char str[7]; HANDLE h;
+			char str[50]; HANDLE h;
+			// label
 			sprintf( str, "out%d   %ssrc", i+1, i+1==10 ? "  " : "    " );
 			h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 49, 123+i*30, 80, 15, hMain, LB1+i, NULL, NULL);
 			SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+			// COMBOBOX
 			cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 127, 120+i*30, 50, 800, hMain, CB1+i, NULL, NULL);
 			SendMessageA( cbs[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 			EnableWindow( cbs[i], 0 );
+			// label
 			h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 202, 123+i*30, 50, 15, hMain, LB1+10+i, NULL, NULL);
 			SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+			// COMBOBOX
 			cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 235, 120+i*30, 150, 800, hMain, CB2+i, NULL, NULL);
 			SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 			EnableWindow( cbs2[i], 0 );
@@ -694,16 +689,13 @@
 			SendMessageA( cbs3[i], EM_SETLIMITTEXT, (WPARAM)6, (LPARAM)MAKELONG(TRUE, 0));
 			SendMessageA( cbs3[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 			EnableWindow( cbs3[i], 0 );
-			// label
-			//h = CreateWindowEx( 0, "static", "samples", WS_VISIBLE|WS_CHILD, 496, 123+i*30, 50, 15, hMain, LB1+10+i, NULL, NULL);
-			//SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 			}
 
+		// show
 		ShowWindow( hMain, SW_SHOW );
 
 		// init
-		console_init();
-		PRINT( "Built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
+		console_init(); PRINT( "Built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
 		init();
 		conf_load( "RTFIR.conf" );
 
