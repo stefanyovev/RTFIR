@@ -24,6 +24,7 @@
 
 	struct out {
 		int src;
+		int delay;
 		struct convolve_kernel *k;
 		}; 
 
@@ -55,7 +56,8 @@
 	volatile int64_t dith_p;  // correction period [samples]
 
 	int jobs_per_channel;  // = threads / outs
-
+	
+	int print_modified_samples;  // bool default 0
 
 	// ------------------------------------------------------------------------------------------------------------ //
 
@@ -151,12 +153,14 @@
 				if( dith_sig < 0 ){
 					cursor += 1;
 					// todo: remove 1 from all stats so dith sig is lower next ime
-					PRINT("%s skipped 1 sample %d \r\n", clock_timestr(), cursor ); 
+					if( print_modified_samples )
+						PRINT("%s skipped 1 sample %d \r\n", clock_timestr(), cursor ); 
 					}
 				else {
 					cursor -= 1;
 					// todo: add 1 to all stats so dith sig is bigger next ime
-					PRINT("%s replayed 1 sample %d \r\n", clock_timestr(), cursor );
+					if( print_modified_samples )
+						PRINT("%s replayed 1 sample %d \r\n", clock_timestr(), cursor );
 					}
 				dith_t = now;
 			}
@@ -253,7 +257,8 @@
 		if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
 		if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );        
 		samplerate = msize = ssize = canvas = ports = map = gstat = gstat_len = jobs_per_channel = 0;
-		cursor = -1; }
+		cursor = -1;
+		print_modified_samples = 0; }
 
 
 	int start( int sd, int dd, int sr, int tc ){  // -> bool

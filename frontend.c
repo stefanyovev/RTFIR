@@ -14,17 +14,20 @@
 	#define CMB1 (555)
 	#define CMB2 (556)
 	#define BTN1 (123)
+	#define BTN4 (126)
 	#define LB1 (110)
 	#define CB1 (220)
 	#define CB2 (330)
+	#define CB3 (440)
 	#define EDT (400)
 
-	HWND hwnd;
+	HWND hMain; // handle main window
 	MSG msg;
 	
-	HWND hr1, hr2, hr3, hr4, hLL, hbctl1, hbctl2, hCombo1, hCombo2, hBtn;
+	HWND hr1, hr2, hr3, hr4, hLL, hbctl1, hbctl2, hCombo1, hCombo2, hBtn, hBtn4;
 	HWND cbs[10];
 	HWND cbs2[10];
+	HWND cbs3[10];
 	HWND hEdit;
 
 	HFONT hfont1, hfont2, hfont3, hfont4;
@@ -130,6 +133,7 @@
 			filters[i]->k = data;
 			filters[i]->kn = count;
 			i++;
+			PRINT( "Loaded %s - %d taps \r\n", r.cFileName, count );
 		} while( FindNextFile( h, &r ) );
 		FindClose(h);
 		if( i == 1 )
@@ -143,8 +147,8 @@
 	int devices_as_in_conf(){ // whether the two devices selected are as in the conf
 		char a[250], b[250];
 		if( !conf_get( "device1" ) || !conf_get( "device2" ) ) return 0;
-		GetDlgItemText( hwnd, CMB1, a, 250);
-		GetDlgItemText( hwnd, CMB2, b, 250);
+		GetDlgItemText( hMain, CMB1, a, 250);
+		GetDlgItemText( hMain, CMB2, b, 250);
 		return strcmp( a, conf_get( "device1" ) ) == 0 && strcmp( b, conf_get( "device2" ) ) == 0; }
 
 	int samplerate_as_in_conf(){ // whether the selected samplerate is as in the conf
@@ -156,8 +160,8 @@
 
 		// fill left combos
 		char txt1[250], txt2[250];
-		GetDlgItemText( hwnd, CMB1, txt1, 250 );
-		GetDlgItemText( hwnd, CMB2, txt2, 250 );
+		GetDlgItemText( hMain, CMB1, txt1, 250 );
+		GetDlgItemText( hMain, CMB2, txt2, 250 );
 		for( int i=0; i<Pa_GetDeviceInfo( device_id( txt2 ) )->maxOutputChannels; i++ ){
 			SendMessage( cbs[i], CB_RESETCONTENT, (WPARAM)0, (LPARAM)0 );
 			SendMessage( cbs[i], CB_ADDSTRING, (WPARAM)0, (LPARAM)"" );
@@ -182,30 +186,44 @@
 
 		char key[20]; int val;
 		for( int i=0; i<10; i++ ){
+
 			sprintf( key, "out%d", i+1 );
 			if( conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
 				SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)val, (LPARAM)0 );
 			else SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 );
+
 			sprintf( key, "filter%d", i+1 );
 			if( samplerate_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) ) )
 				SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 );
-			else SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); } }
+			else SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)0, (LPARAM)0 ); 
+
+			sprintf( key, "delay%d", i+1 );
+			if( samplerate_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 && val > -1 && val <= samplerate )
+				SendMessage( cbs3[i], WM_SETTEXT, (WPARAM)0, conf_get( key ) );
+			//else
+				//SendMessage( cbs3[i], WM_SETTEXT, (WPARAM)0, "0" );
+
+			} }
 
 	void save_conf(){
 		char txt[250], key[20];
 		sprintf( txt, "%d", samplerate );
 		conf_set( "samplerate", txt );
-		GetDlgItemText( hwnd, CMB1, txt, 250 );
+		GetDlgItemText( hMain, CMB1, txt, 250 );
 		conf_set( "device1", txt );
-		GetDlgItemText( hwnd, CMB2, txt, 250 );
+		GetDlgItemText( hMain, CMB2, txt, 250 );
 		conf_set( "device2", txt );
 		for( int i=0; i<10; i++ ){
 			sprintf( key, "out%d", i+1 );
-			GetDlgItemText( hwnd, CB1+i, txt, 250 );
+			GetDlgItemText( hMain, CB1+i, txt, 250 );
 			conf_set( key, txt );
 			sprintf( key, "filter%d", i+1 );
-			GetDlgItemText( hwnd, CB2+i, txt, 250 );
-			conf_set( key, txt ); }
+			GetDlgItemText( hMain, CB2+i, txt, 250 );
+			conf_set( key, txt );
+			sprintf( key, "delay%d", i+1 );
+			GetDlgItemText( hMain, CB3+i, txt, 250 );
+			conf_set( key, txt );
+			}
 		conf_save(); }
 
 	int get_cpu_cores(){
@@ -227,6 +245,103 @@
 			ptr ++; }
 		return processorCoreCount; }
 
+	// -------------------------------------------------------------------------------------------------------------- //
+	
+	int EditNumber_out = -1;
+	static WNDPROC EditNumber_oldproc;
+
+
+	int EditNumber_value(){ // returns -1 on failure
+		char txt[7]; int val;
+		SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
+		if( sscanf( txt, "%d", &val ) == 1 && val > -1 && val <= samplerate )
+			return val;
+		return -1; }
+
+	
+	int EditNumber_value_next( char ch ){
+		// what value would be if we insert ch
+		// at current pos, replacing selection
+		char txt[7];
+		SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
+		
+		int sel, selstart, selend;
+		char newtxt[7]; int newval;
+		
+		sel = SendMessage( cbs3[EditNumber_out], EM_GETSEL, 0, 0 );
+		selstart = LOWORD(sel);
+		selend = HIWORD(sel);
+		memcpy( newtxt, txt, selstart );
+		newtxt[selstart] = ch;
+		memcpy( newtxt+selstart+1, txt+selend, strlen(txt)-selend );
+		newtxt[selstart+1 +strlen(txt)-selend] = 0;
+
+		if( sscanf( newtxt, "%d", &newval ) == 1 && newval > -1 && newval <= samplerate )
+			return newval;
+		
+		//PRINT( " INVALID \"%s\" \r\n", newtxt );
+		return -1;
+		
+	}
+
+	LRESULT CALLBACK EditNumber_proc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
+		if( msg == WM_CHAR ){
+			
+			//char txt[7];
+			//SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 7, txt );
+
+			if( wParam == VK_ESCAPE ){
+				EditNumber_rollback();
+				SetFocus( hMain );
+				return 0; }
+			
+			if( wParam == VK_RETURN ){
+				EditNumber_commit();
+				return 0; }
+
+			if( wParam != VK_BACK && EditNumber_value_next( wParam ) == -1 ){
+				return 0;
+			}
+			
+		}
+		
+		if( msg == WM_PASTE || msg == WM_CLEAR || msg == WM_CUT ){
+			return 0;
+		}
+
+		return CallWindowProc( EditNumber_oldproc, hwnd, msg, wParam, lParam);
+	}
+
+	void EditNumber_begin( int out ){
+		EditNumber_out = out;
+		EditNumber_oldproc = SetWindowLongPtr( cbs3[out], GWLP_WNDPROC, EditNumber_proc );
+		SendMessageA( cbs3[out], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));  // repaint
+	}
+
+	void EditNumber_rollback(){
+		int out = EditNumber_out;
+		EditNumber_out = -1;
+		SetWindowLongPtr( cbs3[out], GWLP_WNDPROC, EditNumber_oldproc );
+		char txt[10]; sprintf( txt, "%d", map[out].delay );
+		SendMessage( cbs3[out], WM_SETTEXT, (WPARAM)0, txt );
+		SendMessageA( cbs3[out], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));  // repaint
+	}
+
+	void EditNumber_commit(){
+		char txt[250]; SendMessage( cbs3[EditNumber_out], WM_GETTEXT, 250, txt );
+		//save
+		int val; 
+		if( sscanf( txt, "%d", &val ) == 1 && val > -1 && val <= samplerate ) {
+			PRINT( " SET DELAY out %d delay %d \r\n", EditNumber_out, val );
+			map[EditNumber_out].delay = val;
+			}
+		// refresh reloading
+		EditNumber_rollback(); 
+		SetFocus( hMain );
+	}
+	
+	// -------------------------------------------------------------------------------------------------------------- //
+
 	LRESULT CALLBACK WndProc( HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam ){
 		if( msg == WM_COMMAND ){
 
@@ -243,9 +358,9 @@
 
 			} else if( BN_CLICKED == HIWORD(wParam) && (LOWORD(wParam) == BTN01 || LOWORD(wParam) == BTN02) ){  //  config device clicked
 				char txt[250];
-				GetDlgItemText( hwnd, LOWORD(wParam) == BTN01 ? CMB1 : CMB2, txt, 250 );
+				GetDlgItemText( hMain, LOWORD(wParam) == BTN01 ? CMB1 : CMB2, txt, 250 );
 				if( strstr( Pa_GetHostApiInfo( Pa_GetDeviceInfo( device_id( txt ) )->hostApi )->name, "ASIO" ) != 0 ){
-					PaAsio_ShowControlPanel( device_id( txt ), hwnd );
+					PaAsio_ShowControlPanel( device_id( txt ), hMain );
 				} else {
 					STARTUPINFO si; memset( &si, 0, sizeof(STARTUPINFO) );
 					PROCESS_INFORMATION pi; memset( &pi, 0, sizeof(PROCESS_INFORMATION) );
@@ -256,20 +371,32 @@
 					strcat( cmd, (LOWORD(wParam) == BTN01) ? "1" : "0" );
 					CreateProcessA( 0, cmd, 0, 0, 0, 0, 0, 0, &si, &pi ); }
 
+			} else if( BN_CLICKED == HIWORD(wParam) && LOWORD(wParam) == BTN4 ){  // print_modified_samples clicked
+				
+				if( IsDlgButtonChecked( hMain, BTN4 ) ){
+					print_modified_samples = 0;
+					CheckDlgButton( hMain, BTN4, BST_UNCHECKED );
+					PRINT( "print_modified_samples OFF \r\n" );
+				} else {
+					CheckDlgButton( hMain, BTN4, BST_CHECKED );
+					print_modified_samples = 1;
+					PRINT( "print_modified_samples ON \r\n" );
+				}
+				
 			} else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
 				show_conf();
 				
 			} else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB2 ){  // device 2 changed
 				show_conf();
 				
-			} else if( LOWORD(wParam) == BTN1 ){  // play clicked
+			} else if( LOWORD(wParam) == BTN1 ){                                     // play clicked
 				int sd, dd;
 				char txt[250];
-				GetDlgItemText( hwnd, CMB1, txt, 250 );
+				GetDlgItemText( hMain, CMB1, txt, 250 );
 				sd = device_id( txt );
-				GetDlgItemText( hwnd, CMB2, txt, 250 );
+				GetDlgItemText( hMain, CMB2, txt, 250 );
 				dd = device_id( txt );
-				if( start( sd, dd, samplerate, get_cpu_cores() ) ){                                   // START
+				if( start( sd, dd, samplerate, get_cpu_cores() ) ){                   // START
 					EnableWindow( hr1, 0 );
 					EnableWindow( hr2, 0 );
 					EnableWindow( hr3, 0 );
@@ -282,24 +409,36 @@
 					show_conf();
 					for( int i=0; i<ports[1].channels_count; i++ ){
 						if( i < 10 ){
-							EnableWindow( cbs[i], 1 );
 							char key[6]; int val;
+
+							EnableWindow( cbs[i], 1 );
 							sprintf( key, "out%d", i+1 );
 							if( devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 )
 								map[i].src = val-1;
+							SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
+
+							EnableWindow( cbs2[i], 1 );
 							sprintf( key, "filter%d", i+1 );
 							if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && filter_p( conf_get( key ) )){
 								struct filter *fl = filter_p( conf_get( key ) );
 								set_filter( i, fl->k, fl->kn, fl->name );
-								SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); } 
-							SendMessage( cbs[i], CB_SETCURSEL, (WPARAM)map[i].src+1, (LPARAM)0 );
-							EnableWindow( cbs2[i], 1 ); } }
-					}
+								SendMessage( cbs2[i], CB_SETCURSEL, (WPARAM)(filter_i( conf_get( key ) )+1), (LPARAM)0 ); }
 
-			} else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){
-				int out = LOWORD(wParam) - CB1;				
+							EnableWindow( cbs3[i], 1 );
+							sprintf( key, "delay%d", i+1 );
+							if( samplerate_as_in_conf() && devices_as_in_conf() && conf_get( key ) && sscanf( conf_get( key ), "%d", &val ) == 1 && val > 0 && val <= samplerate ){
+								map[i].delay = val; }
+							sprintf( txt, "%d", map[i].delay );
+							SendMessage( cbs3[i], WM_SETTEXT, (WPARAM)0, txt );
+							
+						}
+					}
+				}
+
+			} else if( (LOWORD(wParam) >= CB1) && LOWORD(wParam) <= CB1+10 && CBN_SELCHANGE == HIWORD(wParam) ){  // out changed
+				int out = LOWORD(wParam) - CB1;
 				char  txt[20];
-				GetDlgItemText( hwnd, CB1+out, txt, 20 );      
+				GetDlgItemText( hMain, CB1+out, txt, 20 );
 				if( txt[0] == 0 ){
 					map[out].src = -1;
 					PRINT( "%s out %d: removed source \r\n", clock_timestr(), out+1 );
@@ -309,10 +448,10 @@
 					PRINT( "%s out %d: set source %d \r\n", clock_timestr(), out+1, chan+1 );
 				}
 
-			} else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){
+			} else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){  // filter changed
 				int out = LOWORD(wParam) - CB2;
 				char txt[100];
-				GetDlgItemText( hwnd, CB2+out, txt, 100 );
+				GetDlgItemText( hMain, CB2+out, txt, 100 );
 				if( txt[0] == 0 ){
 					set_filter( out, 0, 0, 0 );
 					PRINT( "%s out %d: removed filter \r\n", clock_timestr(), out );
@@ -321,8 +460,37 @@
 					set_filter( out, fl->k, fl->kn, fl->name );
 					PRINT( "%s out %d: set filter %s \r\n", clock_timestr(), out, txt );
 				}
+
+			} else if( (LOWORD(wParam) >= CB3) && LOWORD(wParam) <= CB3+10 ){  // delay change
+				int out = LOWORD(wParam) - CB3;				
+				switch( HIWORD(wParam) ){
+					case EN_SETFOCUS:
+						EditNumber_begin( out );
+						break;
+					case EN_KILLFOCUS:
+						EditNumber_rollback();
+						break;
+				}
+				
 			}
+
 		}
+
+		else if( msg == WM_LBUTTONDOWN || msg == WM_RBUTTONDOWN ){
+			
+			if( EditNumber_out > -1 ){
+				EditNumber_rollback();
+				SetFocus( hMain ); }
+
+		}
+
+		else if( msg == WM_CTLCOLOREDIT ){
+			int out = GetDlgCtrlID ( lParam ) -CB3;
+			if( EditNumber_out > -1 && EditNumber_out == out )
+				SetTextColor( (HDC)wParam, RGB(250, 0, 0));
+			else
+				SetTextColor( (HDC)wParam, RGB(0, 0, 0));
+			return (LRESULT) GetStockObject(DC_BRUSH); }
 
 		else if( msg == WM_CLOSE ){
 			if( cursor > 0 ) save_conf();
@@ -332,6 +500,8 @@
 			PostQuitMessage( 0 ); }
 
 		return DefWindowProc( hwnd, msg, wParam, lParam ); }
+
+
 
 	// ---------------------------- draw ------------------------------------------------------
 	HDC hdc, hdcMem;
@@ -352,7 +522,7 @@
 		bmi.bmiHeader.biPlanes = 1;
 		bmi.bmiHeader.biBitCount = 32;             // last byte not used, 32 bit for alignment
 		bmi.bmiHeader.biCompression = BI_RGB;
-		hdc = GetDC( hwnd );
+		hdc = GetDC( hMain );
 		hbmp = CreateDIBSection( hdc, &bmi, DIB_RGB_COLORS, &pixels, 0, 0 );
 		hdcMem = CreateCompatibleDC( hdc );
 		SelectObject( hdcMem, hbmp );
@@ -476,18 +646,19 @@
 		hfont4 = CreateFontIndirect(&font4);
 
 		// create
-		hwnd = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );
-		hr1 = CreateWindowEx( 0, "Button", "44.1k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON|WS_GROUP, 70, 10, 50, 23, hwnd, R1, 0, 0);
-		hr2 = CreateWindowEx( 0, "Button", "48k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 160, 10, 50, 23, hwnd, R2, 0, 0);
-		hr3 = CreateWindowEx( 0, "Button", "96k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 230, 10, 50, 23, hwnd, R3, 0, 0);
-		hr4 = CreateWindowEx( 0, "Button", "192k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 300, 10, 50, 23, hwnd, R4, 0, 0);
-		hLL = CreateWindowEx( 0, "static", "", WS_VISIBLE|WS_CHILD, 410, 13, 80, 15, hwnd, LL, NULL, NULL);
-		hbctl1 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 40, 30, 23, hwnd, BTN01, NULL, NULL);
-		hbctl2 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 70, 30, 23, hwnd, BTN02, NULL, NULL);
-		hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hwnd, CMB1, NULL, NULL);
-		hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hwnd, CMB2, NULL, NULL);
-		hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hwnd, BTN1, NULL, NULL);
-		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hwnd, EDT, NULL, NULL);
+		hMain = CreateWindowEx( WS_EX_APPWINDOW, "mainwindow", "RTFIR", WS_MINIMIZEBOX | WS_SYSMENU | WS_POPUP | WS_CAPTION, 300, 200, 600, 700, 0, 0, hInstance, 0 );
+		hr1 = CreateWindowEx( 0, "Button", "44.1k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON|WS_GROUP, 70, 10, 50, 23, hMain, R1, 0, 0);
+		hr2 = CreateWindowEx( 0, "Button", "48k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 160, 10, 50, 23, hMain, R2, 0, 0);
+		hr3 = CreateWindowEx( 0, "Button", "96k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 230, 10, 50, 23, hMain, R3, 0, 0);
+		hr4 = CreateWindowEx( 0, "Button", "192k", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_AUTORADIOBUTTON, 300, 10, 50, 23, hMain, R4, 0, 0);
+		hLL = CreateWindowEx( 0, "static", "", WS_VISIBLE|WS_CHILD, 410, 13, 80, 15, hMain, LL, NULL, NULL);
+		hbctl1 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 40, 30, 23, hMain, BTN01, NULL, NULL);
+		hbctl2 = CreateWindowEx( 0, "Button", "\x052", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_PUSHBUTTON, 10, 70, 30, 23, hMain, BTN02, NULL, NULL);
+		hCombo1 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 40, 450, 8000, hMain, CMB1, NULL, NULL);
+		hCombo2 = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST|CBS_SORT, 48, 70, 450, 8000, hMain, CMB2, NULL, NULL);
+		hBtn = CreateWindowEx( 0, "Button", "Play >", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_DEFPUSHBUTTON, 507, 40, 77, 53, hMain, BTN1, NULL, NULL);
+		hEdit = CreateWindowEx( 0, "static", "", WS_CHILD | WS_VISIBLE, 15, 460, 365, 200, hMain, EDT, NULL, NULL);
+		hBtn4 = CreateWindowEx( 0, "Button", "print modified samples", WS_VISIBLE|WS_CHILD|WS_TABSTOP|BS_CHECKBOX, 15, 435, 150, 23, hMain, BTN4, 0, 0);
 
 		SendMessageA( hr1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hr2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
@@ -499,23 +670,36 @@
 		SendMessageA( hCombo1, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hCombo2, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hBtn, WM_SETFONT, (WPARAM)hfont3, (LPARAM)MAKELONG(TRUE, 0));
+		SendMessageA( hBtn4, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
 		SendMessageA( hEdit, WM_SETFONT, (WPARAM)hfont4, (LPARAM)MAKELONG(TRUE, 0));
 
 		for( int i=0; i<10; i++ ){
 			char str[7]; HANDLE h;
-			sprintf( str, "Out%d   %ssrc", i+1, i+1==10 ? "  " : "	" );
-			h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 49, 133+i*30, 80, 15, hwnd, LB1+i, NULL, NULL);
+			sprintf( str, "out%d   %ssrc", i+1, i+1==10 ? "  " : "    " );
+			h = CreateWindowEx( 0, "static", str, WS_VISIBLE|WS_CHILD, 49, 123+i*30, 80, 15, hMain, LB1+i, NULL, NULL);
 			SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-			cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 127, 130+i*30, 50, 800, hwnd, CB1+i, NULL, NULL);
+			cbs[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 127, 120+i*30, 50, 800, hMain, CB1+i, NULL, NULL);
 			SendMessageA( cbs[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-			EnableWindow( cbs[i], 0 );			
-			h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 202, 133+i*30, 50, 15, hwnd, LB1+10+i, NULL, NULL);
+			EnableWindow( cbs[i], 0 );
+			h = CreateWindowEx( 0, "static", "filter", WS_VISIBLE|WS_CHILD, 202, 123+i*30, 50, 15, hMain, LB1+10+i, NULL, NULL);
 			SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-			cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 235, 130+i*30, 150, 800, hwnd, CB2+i, NULL, NULL);
+			cbs2[i] = CreateWindowEx( 0, "ComboBox", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|CBS_DROPDOWNLIST, 235, 120+i*30, 150, 800, hMain, CB2+i, NULL, NULL);
 			SendMessageA( cbs2[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
-			EnableWindow( cbs2[i], 0 ); }
+			EnableWindow( cbs2[i], 0 );
+			// label
+			h = CreateWindowEx( 0, "static", "delay", WS_VISIBLE|WS_CHILD, 407, 123+i*30, 50, 15, hMain, LB1+10+i, NULL, NULL);
+			SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+			// EDIT
+			cbs3[i] = CreateWindowEx( WS_EX_CLIENTEDGE, "Edit", 0, WS_VISIBLE|WS_CHILD|WS_TABSTOP|ES_NUMBER|ES_CENTER, 445, 120+i*30, 60, 24, hMain, CB3+i, NULL, NULL);
+			SendMessageA( cbs3[i], EM_SETLIMITTEXT, (WPARAM)6, (LPARAM)MAKELONG(TRUE, 0));
+			SendMessageA( cbs3[i], WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+			EnableWindow( cbs3[i], 0 );
+			// label
+			//h = CreateWindowEx( 0, "static", "samples", WS_VISIBLE|WS_CHILD, 496, 123+i*30, 50, 15, hMain, LB1+10+i, NULL, NULL);
+			//SendMessageA( h, WM_SETFONT, (WPARAM)hfont2, (LPARAM)MAKELONG(TRUE, 0));
+			}
 
-		ShowWindow( hwnd, SW_SHOW );
+		ShowWindow( hMain, SW_SHOW );
 
 		// init
 		console_init();

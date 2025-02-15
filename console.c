@@ -20,7 +20,9 @@
 	// TODO: mode without wrapping
 	// TOOD: remove wrapping too complicated for no gain
 	// TODO: rm init - if static initialilzed
-    // TODO: when printing a single cahracter does nothing sometimes
+	// TODO: when printing a single cahracter does nothing sometimes
+	// TODO: so we can log and print - make it just a list of 250byte blocks. cursor pointing first line.
+	//       to print replace the string pointer by cursor and cursor++
 
 	#define CONSOLE_WIDTH 80
 	#define CONSOLE_HEIGHT 15
