@@ -9,13 +9,13 @@
 		#include <stdio.h>
 		#include <stdint.h>
 		#include <immintrin.h>	
-		#define PRINT printf
-		#define ERROR(x) { PRINT(x); exit(1); }
+		#define print printf		
+		void error( char *msg ){
+			print( "error: %s", msg );
+			exit(1); }		
 		#include "mem.c"
-		#define MEM mem_alloc
-		#define MEMA mem_alloc_aligned
-		#define FREE mem_free
 	#endif
+
 
 	struct convolve_kernel {
 		char *name;
@@ -31,19 +31,19 @@
 	#define ALIGNMENT 32
 
 	struct convolve_kernel* convolve_kernel_new( char *name, float *k, int kn ){
-		struct convolve_kernel *R = MEM( sizeof( struct convolve_kernel ) );
-		R->name = MEM( strlen( name )+1 );
+		struct convolve_kernel *R = mem( sizeof( struct convolve_kernel ) );
+		R->name = mem( strlen( name )+1 );
 		strcpy( R->name, name );
 		R->len = ( kn / 16 ) * 16 + 16; // filter len multiple of 16 samples
-		R->data = MEMA( R->len * sizeof(float) * 8, ALIGNMENT );
+		R->data = mem_aligned( R->len * sizeof(float) * 8, ALIGNMENT );
 		for( int i=0; i<kn; i++ )
 			R->data[ R->len-kn +i] = _mm256_broadcast_ss( k +kn-1 -i );
 		return R; }
 	
 	void convolve_kernel_free( struct convolve_kernel *k ){
-		FREE( k->name );
-		FREE( k->data );
-		FREE( k ); }
+		mem_free( k->name );
+		mem_free( k->data );
+		mem_free( k ); }
 
 	void convolve_naive( void *task ){
 		float *x = ((struct convolve_task*)task)->in;
@@ -105,10 +105,10 @@
 	int main( int, int ){
 		float v = 0.5;
 		__m256 m =  _mm256_broadcast_ss( &v );
-		PRINT( "%d \r\n", sizeof( m ) / sizeof( v ) );  // 8
-		PRINT( "%.2f \r\n", v );  // 0.5
-		PRINT( "%.2f \r\n", *( (float*)&m ) ); // 0.5
-		PRINT( "%.2f \r\n", *( (float*)&m +7 ) ); // 0.5
+		print( "%d \r\n", sizeof( m ) / sizeof( v ) );  // 8
+		print( "%.2f \r\n", v );  // 0.5
+		print( "%.2f \r\n", *( (float*)&m ) ); // 0.5
+		print( "%.2f \r\n", *( (float*)&m +7 ) ); // 0.5
 		}
 	// -----------------------------------------------------------------------------------------------
 	*/
@@ -119,49 +119,49 @@
 	
 	void print_floats( float* k, int len ){
 		for( int i=0; i<len; i++ ){
-			if( k[i] == 0 ) PRINT( "." );
-			else PRINT( "%1g", k[i] ); } }
+			if( k[i] == 0 ) print( "." );
+			else print( "%1g", k[i] ); } }
 
 	void print_kernel( struct convolve_kernel *k ){
 		float v;
 		for( int i=0; i<k->len; i++ ){
 			v = *( (float*)(k->data+i) );
-			if( v == 0 ) PRINT( "." );
-			else PRINT( "%1g", v ); } }
+			if( v == 0 ) print( "." );
+			else print( "%1g", v ); } }
 	
 	int main( int, int ){
 		
 		#define HLEN 32
 		#define SLEN 96
 
-		PRINT( "\r\n   " );
-		for( int i=0; i<96; i++ ) if( !(i%10) ) PRINT("."); else PRINT( "%d", i%10 );
-		PRINT( "\r\n" );		
+		print( "\r\n   " );
+		for( int i=0; i<96; i++ ) if( !(i%10) ) print("."); else print( "%d", i%10 );
+		print( "\r\n" );		
 
-		float *h = MEM( sizeof(float)*HLEN );
+		float *h = mem( sizeof(float)*HLEN );
 		h[0] = 1;
 		h[30] = 1;
 		h[31] = 1;
 		
-		PRINT( "h: " );
+		print( "h: " );
 		print_floats( h, HLEN );
-		PRINT( "\r\n" );
+		print( "\r\n" );
 
 		struct convolve_kernel			
 			*k = convolve_kernel_new( "H", h, HLEN );
 
-		PRINT( "k: " );
+		print( "k: " );
 		print_kernel( k );
-		PRINT( "\r\n" );
+		print( "\r\n" );
 
-		float *x = MEM( sizeof(float)*SLEN );
+		float *x = mem( sizeof(float)*SLEN );
 		x[32]=1; x[33]=2; x[34]=3; x[35]=2; x[36]=1;
 		
-		PRINT( "x: " );
+		print( "x: " );
 		print_floats( x, SLEN );
-		PRINT( "\r\n" );
+		print( "\r\n" );
 
-		float *y = MEM( sizeof(float)*SLEN );		
+		float *y = mem( sizeof(float)*SLEN );		
 		struct convolve_task T;
 		T.in = x + 32;
 		T.out = y + 32;
@@ -169,9 +169,9 @@
 		T.k = k;
 		convolve( &T );
 		
-		PRINT( "y: " );
+		print( "y: " );
 		print_floats( y, SLEN );
-		PRINT( "\r\n" );
+		print( "\r\n" );
 		
 		// --------------------------------------------------
 		memset( y, 0, sizeof(float)*SLEN );
@@ -185,9 +185,9 @@
 		convolve( &t1 );
 		convolve( &t2 );
 		
-		PRINT( "y: " );
+		print( "y: " );
 		print_floats( y, SLEN );
-		PRINT( "\r\n" );
+		print( "\r\n" );
 
 	}
 	*/
@@ -201,18 +201,18 @@
 	
 	void compare_floats( float *a, float *b, int n ){
 		for( int i=0; i<n; i++ )
-			if( *a == *b ) PRINT( "." );
-			else PRINT( "X" ); }
+			if( *a == *b ) print( "." );
+			else print( "X" ); }
 	
 	int main( int, int ){
 		
 		#define HLEN 32
 		#define SLEN 96
 		
-		float *h = MEM( sizeof(float)*HLEN );
-		float *x = MEM( sizeof(float)*SLEN );
-		float *y1 = MEM( sizeof(float)*SLEN );
-		float *y2 = MEM( sizeof(float)*SLEN );
+		float *h = mem( sizeof(float)*HLEN );
+		float *x = mem( sizeof(float)*SLEN );
+		float *y1 = mem( sizeof(float)*SLEN );
+		float *y2 = mem( sizeof(float)*SLEN );
 
 		fill_floats( h, SLEN );
 		fill_floats( x, SLEN );

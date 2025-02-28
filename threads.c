@@ -52,10 +52,10 @@
 
 
 	// MAIN
-	static void threads_queue_lock(){ while( WaitForSingleObject( threads_queue_mutex, INFINITE ) != 0 ) PRINT("X"); }
+	static void threads_queue_lock(){ while( WaitForSingleObject( threads_queue_mutex, INFINITE ) != 0 ) print("X"); }
 	static void threads_queue_unlock(){ ReleaseMutex( threads_queue_mutex ); }
-	static void threads_wait_empty(){ while( WaitForSingleObject( threads_queue_empty, INFINITE ) != 0 ) PRINT("X"); }
-	static void threads_wait_avail(){ while( WaitForSingleObject( threads_queue_avail, INFINITE ) != 0 ) PRINT("X"); }
+	static void threads_wait_empty(){ while( WaitForSingleObject( threads_queue_empty, INFINITE ) != 0 ) print("X"); }
+	static void threads_wait_avail(){ while( WaitForSingleObject( threads_queue_avail, INFINITE ) != 0 ) print("X"); }
 
 	void threads_submit( void *function, void *arg, int argsize ){
 
@@ -143,9 +143,9 @@
 			threads_wait_empty();
 			/*
 			if( threads_queue_tail || threads_queue_body ){
-				PRINT(" 4");
+				print(" 4");
 			}else{
-				PRINT(" 5");
+				print(" 5");
 				return;
 			}
 			*/
@@ -188,7 +188,6 @@
 #if __INCLUDE_LEVEL__ == 0
 	
 	#include <stdio.h>    // printf	
-	// void (*print)( char *format, ... ) = &printf;
 
 	/* should not cause any cpu usage
 	int main( int, int ){

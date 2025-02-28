@@ -9,13 +9,10 @@
 	#include <windows.h>
 	#include "portaudio.h"
 
-	void error( char *msg, int code ){
-		printf( "ERROR: %s", msg );
-		MessageBox( GetActiveWindow(), msg, "ERROR", MB_OK );
-		exit(1);
-	}
-
-	#define RTFIR
+	void error( char *msg ){
+		printf( "error: %s", msg );
+		MessageBox( GetActiveWindow(), msg, "error", MB_OK );
+		exit(1); }
 
 	#include "mem.c"
 	#include "print.c"
@@ -30,10 +27,6 @@
 	/*
 
 		Todos:
-
-			- mem, mema, memfree lowercase
-			- print lowercase, single function in a file
-			- define NOW where its used - core&frontend
 
 			- test convolve btn
 			- reload filters btn

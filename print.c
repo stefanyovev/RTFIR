@@ -19,11 +19,12 @@
 	// TODO: so we can log and print - make it just a list of 250byte blocks. cursor pointing first line.
 	//       to print replace the string pointer by cursor and cursor++
 
-	#ifndef RTFIR
+	#if __INCLUDE_LEVEL__ == 0
 		#include <stdio.h>
 		#include <stdlib.h>
 		#include <string.h>
 	#endif
+
 
 	#define WIDTH 80
 	#define HEIGHT 15
@@ -163,7 +164,7 @@
 
 
 
-	#ifndef RTFIR
+	#if __INCLUDE_LEVEL__ == 0
 	
 		int main( int argc, char **argv ){
 			
