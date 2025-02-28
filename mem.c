@@ -2,10 +2,13 @@
 
 
 	// Memory Allocation 
-	// allocate, check, set-zero.
 	// single free for normal and aligned pointers
 
 	// TODO: the list only grows
+
+	#ifndef RTFIR
+		#define ERROR(x) { printf(x); exit(1); }
+	#endif
 
 	struct mem_item {
 		void *a;  // returned to user
@@ -14,6 +17,7 @@
 
 	struct mem_item *mem_list;  // all allocations
 	int mem_list_len;
+
 
 	#define MEM_LIST_PAGE 100   // entries
 
@@ -38,6 +42,9 @@
 			free( mem_list );
 			mem_list = p; } }
 
+	#undef MEM_LIST_PAGE
+	
+	
 	struct mem_item * mem_list_find( void *a ){
 		for( int i=0; i<mem_list_len; i++ )
 			if( mem_list[i].a == a )
@@ -51,6 +58,7 @@
 
 	int mem_list_remove( void *a ){
 		memset( mem_list_find(a), 0, sizeof(struct mem_item) ); }
+
 
 	void * mem_alloc( uint64_t count ){
 		mem_list_init();
@@ -75,3 +83,13 @@
 		if( !p ) ERROR( "Freeing unallocated pointer." );
 		free( p->b );
 		mem_list_remove( a ); }
+
+
+
+	#ifndef RTFIR
+	
+		int main( int argc, char **argv ){
+
+		}
+	
+	#endif

@@ -1,8 +1,9 @@
 
+
+
 	// ############################################################################################################ //
 	// ########################################## GUI ############################################################# //
 
-	#include "conf.c"
 
 	#define R1 (1)
 	#define R2 (2)
@@ -33,18 +34,6 @@
 	HFONT hfont1, hfont2, hfont3, hfont4;
 	LOGFONT font1 = {0}, font2 = {0}, font3 = {0}, font4 = {0};
 
-	// ------------------------------------------------------------------------------------------------------------ //
-
-	void draw();
-	void CALLBACK every_10ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		draw(); }
-	void CALLBACK every_100ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
-		if( console_changed ){
-			console_changed = 0;
-			SetWindowText( hEdit, console ); }		
-		if( cursor > -1 ){
-			char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*100.0) );
-			SetWindowText( hLL, txt ); } }
 
 	// ------------------------------------------------------------------------------------------------------------ //
 	// ------------ names ----------------------------------------------------------------------------------------- //
@@ -599,6 +588,19 @@
 		BitBlt( hdc, 382, 460, 200, 200, hdcMem, 0, 0, SRCCOPY );
 	}
 
+	// ------------------------------------------------------------------------------------------------------------ //
+	// ------- refresh callbacks ---------------------------------------------------------------------------------- //
+
+	void CALLBACK every_10ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+		draw(); }
+		
+	void CALLBACK every_100ms( HWND hwnd, UINT uMsg, UINT timerId, DWORD dwTime ){
+		if( console_changed ){
+			console_changed = 0;
+			SetWindowText( hEdit, console ); }		
+		if( cursor > -1 ){
+			char txt[50]; sprintf( txt, "Load: %d%% \n", (int)ceil((Pa_GetStreamCpuLoad(ports[0].stream)+Pa_GetStreamCpuLoad(ports[1].stream))*100.0) );
+			SetWindowText( hLL, txt ); } }
 
 	// ############################################################################################################# //
 	// ############### WINMAIN ##################################################################################### //
@@ -614,7 +616,7 @@
 		wc.lpszClassName = "mainwindow";
 		wc.hbrBackground = COLOR_WINDOW; //CreateSolidBrush( RGB(64, 64, 64) );
 		wc.hCursor = LoadCursor( 0, IDC_ARROW );
-		wc.hIcon = LoadIcon(hInstance, "main.ico");
+		wc.hIconSm = LoadIcon(hInstance, "main.ico");
 		RegisterClassEx(&wc);
 
 		// fonts

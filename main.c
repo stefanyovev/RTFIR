@@ -6,54 +6,52 @@
 	#include <string.h>
 	#include <math.h>
 	#include <immintrin.h>	
-	#include "portaudio.h"
 	#include <windows.h>
+	#include "portaudio.h"
 
-	#define ERROR(x) { MessageBox( GetActiveWindow(), x, "ERROR", MB_OK ); exit(1); }
+	void error( char *msg, int code ){
+		printf( "ERROR: %s", msg );
+		MessageBox( GetActiveWindow(), msg, "ERROR", MB_OK );
+		exit(1);
+	}
+
+	#define RTFIR
 
 	#include "mem.c"
-	#define MEM mem_alloc
-	#define MEMA mem_alloc_aligned
-	#define FREE mem_free
-
-	#include "console.c"
-	#define PRINT console_print
-
+	#include "print.c"
 	#include "clock.c"
-	#define NOW clock_time
-	
 	#include "threads.c"
 	#include "convolve.c"
-
 	#include "core.c"
+	#include "conf.c"
 	#include "frontend.c"
 
 
-/*
+	/*
 
-Todos:
+		Todos:
 
-- timing:
-	- startup seq.
-		- dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot;
-		- 100ms 100ms then 800ms correct x10. last corrrection also corrects history then start copy at 1sec
-	- average ports min/max (because it suddenly changes)
+			- mem, mema, memfree lowercase
+			- print lowercase, single function in a file
+			- define NOW where its used - core&frontend
 
-- code:
-	- modules: include or link; private, public, symbols; .h/.c/.o; init, self, instances
-	- frontend as object; create, add_device.. mainloop
-	- threadpool object; return instance; threads_submit( self, f, arg, argsize )  (NOTE)
-	- device objects; generate names; hide portaudio from frontend	
-	- buffers object; read write readpos writepos; input_buffers/output_buffers	 (NOTE)
-		- input_buffers/output_buffers; input callback submits, output callback waits; tasks id
-	- DeviceStream object; has pointer to inp_buffers/outp_buffers 
-	- (NOTE) because if there are more than 1 DeviceStreams, threads_wait will fail
-	- profile/measure/clock_stopwatch/duty_cycles
-	- QueryUnbiasedInterruptTimePrecise, QuerySystemTimePreciseAsFileTime
+			- test convolve btn
+			- reload filters btn
+			- save conf btn
 
-- features:
-	- reload filters, saveconf, resetconf buttons; combos==outchans always enabled
-	- filters on inputs
-	- mix
+			- private portaudio; device, devs, ndevs; names
+			- output buffers, processed cursors
+			- link object; port-port; port-effect; effect-effect; effect-port
+			- threads submit on input
+			
+			- mixing
+			
+			- device-aggregation
+				- threads instances; processing the input to the virtual canvas from more than 1
+					device will require more than 1 thread pools to know the processed cursors
+					of individual channels
 
-*/
+			- frontend as object; create, run, events, callbacks; add_device; on_play_clicked
+				- scene-graph of rects/widgets; nested, clipped; window/font/text/rect/bitmap
+
+	*/

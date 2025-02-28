@@ -59,6 +59,7 @@
 	
 	int print_modified_samples;  // bool default 0
 
+
 	// ------------------------------------------------------------------------------------------------------------ //
 
 
@@ -73,6 +74,13 @@
 
 
 	void _makestat( volatile struct port * p ){
+		
+		/* TODO:
+			- startup seq.
+				- dont consider any graphs first 100ms for min/max,L,G; require 100ms available to calc min/max,L,G; 200ms graph boot;
+				- 100ms 100ms then 800ms correct x10. last corrrection also corrects history then start copy at 1sec
+			- average ports min/max (because it suddenly changes)
+		*/
 
 		int64_t now = NOW();
 		
