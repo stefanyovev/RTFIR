@@ -41,7 +41,7 @@
 	char * names = 0;
 	char * device_name( int device_id ){
 		if( !names ){ 
-			names = MEM( Pa_GetDeviceCount() * 200 );
+			names = mem( Pa_GetDeviceCount() * 200 );
 			char drv_name[50] = "", dev_name[150] = "";
 			for( int i=0; i<Pa_GetDeviceCount(); i++ ){
 				strcpy( dev_name, Pa_GetDeviceInfo( i )->name );
@@ -82,14 +82,14 @@
 	void load_filters( int samplerate ){
 		if( filters ){
 			for( int i=0; filters[i]; i++ ){
-				FREE( filters[i]->name );
-				FREE( filters[i]->k ); }
-			FREE( filters ); filters = 0; }
-		filters = MEM( sizeof(struct filter *) * 100 );
+				mem_free( filters[i]->name );
+				mem_free( filters[i]->k ); }
+			mem_free( filters ); filters = 0; }
+		filters = mem( sizeof(struct filter *) * 100 );
 		// add 'None' - unity kernel
-		filters[0] = MEM( sizeof( struct filter ) );
-		filters[0]->name = MEM( 5 ); strcpy( filters[0]->name, "None" );
-		filters[0]->k = MEM( sizeof(float) * 1 );
+		filters[0] = mem( sizeof( struct filter ) );
+		filters[0]->name = mem( 5 ); strcpy( filters[0]->name, "None" );
+		filters[0]->k = mem( sizeof(float) * 1 );
 		filters[0]->k[0] = 1.0;
 		filters[0]->kn = 1;
 		// add files
@@ -97,7 +97,7 @@
 		WIN32_FIND_DATA r;
 		HANDLE h = FindFirstFile( folder, &r );
 		if( h == INVALID_HANDLE_VALUE ){
-			PRINT( "Folder filters\\%d does not exist. \r\n", samplerate );
+			print( "Folder filters\\%d does not exist. \r\n", samplerate );
 			return;
 			}
 		int i = 1;
@@ -109,28 +109,28 @@
 			float num; while( fscanf( f, "%f", &num ) == 1 ) count ++;
 			if( count == 0 ) continue;
 			if( count > samplerate ){
-				PRINT( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, samplerate );
+				print( "NOT loaded %s exceeds %d taps \r\n", r.cFileName, samplerate );
 				fclose(f);
 				continue; }
 			fseek( f, 0, SEEK_SET );
-			float *data = MEM( sizeof(float) * count );
+			float *data = mem( sizeof(float) * count );
 			for( int j=0; j<count; j++ )
 				fscanf( f, "%f", data +j );
 			fclose(f);
 			// push to list
-			filters[i] = MEM( sizeof( struct filter ) );
-			filters[i]->name = MEM( strlen( fname )+1 );
+			filters[i] = mem( sizeof( struct filter ) );
+			filters[i]->name = mem( strlen( fname )+1 );
 			strcpy( filters[i]->name, r.cFileName );
 			filters[i]->k = data;
 			filters[i]->kn = count;
 			i++;
-			PRINT( "Loaded %s - %d taps \r\n", r.cFileName, count );
+			print( "Loaded %s - %d taps \r\n", r.cFileName, count );
 		} while( FindNextFile( h, &r ) );
 		FindClose(h);
 		if( i == 1 )
-			PRINT( "No filters found in folder filters\\%d. \r\n", samplerate );
+			print( "No filters found in folder filters\\%d. \r\n", samplerate );
 		else
-			PRINT( "Loaded %d filters \r\n", i-1 );
+			print( "Loaded %d filters \r\n", i-1 );
 	}
 
 	// ------------------------------------------------------------------------------------------------------------ //
@@ -228,7 +228,7 @@
 		PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer, ptr = NULL;
 		DWORD returnLength = 0;
 		glpi( buffer, &returnLength );
-		buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) MEM( returnLength );
+		buffer = (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION) mem( returnLength );
 		BOOL r = glpi( buffer, &returnLength );
 		if( !r ) { return 1; } // ???
 		ptr = buffer;
@@ -263,7 +263,7 @@
 		if( sscanf( newtxt, "%d", &newval ) == 1 && newval > -1 && newval <= samplerate )
 			return newval;
 		
-		//PRINT( " INVALID \"%s\" \r\n", newtxt );
+		//print( " INVALID \"%s\" \r\n", newtxt );
 		return -1;
 
 	}
@@ -311,7 +311,7 @@
 		//save
 		int val; 
 		if( sscanf( txt, "%d", &val ) == 1 && val > -1 && val <= samplerate ) {
-			PRINT( "SET DELAY out%d delay %d \r\n", EditNumber_out, val );
+			print( "SET DELAY out%d delay %d \r\n", EditNumber_out, val );
 			map[EditNumber_out].delay = val;
 			}
 		// refresh reloading
@@ -355,11 +355,11 @@
 				if( IsDlgButtonChecked( hMain, BTN4 ) ){
 					print_modified_samples = 0;
 					CheckDlgButton( hMain, BTN4, BST_UNCHECKED );
-					PRINT( "print modified samples OFF \r\n" );
+					print( "print modified samples OFF \r\n" );
 				} else {
 					CheckDlgButton( hMain, BTN4, BST_CHECKED );
 					print_modified_samples = 1;
-					PRINT( "print modified samples ON \r\n" );
+					print( "print modified samples ON \r\n" );
 				}
 
 			} else if( CBN_SELCHANGE == HIWORD(wParam) && LOWORD(wParam) == CMB1 ){  // device 1 changed
@@ -420,11 +420,11 @@
 				GetDlgItemText( hMain, CB1+out, txt, 20 );
 				if( txt[0] == 0 ){
 					map[out].src = -1;
-					PRINT( "REMOVE SOURCE out%d \r\n", out+1 );
+					print( "REMOVE SOURCE out%d \r\n", out+1 );
 				}else {
 					int chan = txt[0]-48-1;
 					map[out].src = chan;
-					PRINT( "SET SOURCE out%d in%d\r\n", out+1, chan+1 );
+					print( "SET SOURCE out%d in%d\r\n", out+1, chan+1 );
 				}
 
 			} else if( (LOWORD(wParam) >= CB2) && LOWORD(wParam) <= CB2+10 && CBN_SELCHANGE == HIWORD(wParam) ){  // filter changed
@@ -433,11 +433,11 @@
 				GetDlgItemText( hMain, CB2+out, txt, 100 );
 				if( txt[0] == 0 ){
 					set_filter( out, 0, 0, 0 );
-					PRINT( "REMOVE FILTER out%d \r\n", out );
+					print( "REMOVE FILTER out%d \r\n", out );
 				} else {
 					struct filter *fl = filter_p( txt );
 					set_filter( out, fl->k, fl->kn, fl->name );
-					PRINT( "SET FILTER out%d %s \r\n", out, txt );
+					print( "SET FILTER out%d %s \r\n", out, txt );
 				}
 
 			} else if( (LOWORD(wParam) >= CB3) && LOWORD(wParam) <= CB3+10 ){  // delay change
@@ -522,7 +522,7 @@
 	    SelectObject( hdcMem, GetStockObject(DC_PEN) );
 		if( ports && ports[0].stats_len && ports[1].stats_len ){
 
-			int now = NOW();
+			int now = clock_time();
 			
 			// move view
 			///*
@@ -697,7 +697,7 @@
 		ShowWindow( hMain, SW_SHOW );
 
 		// init
-		console_init(); PRINT( "Built " ); PRINT( __DATE__ ); PRINT( " " ); PRINT( __TIME__ ); PRINT( "\r\n" );
+		print( "Built " __DATE__ " " __TIME__ "\r\n" );
 		init();
 		conf_load( "RTFIR.conf" );
 

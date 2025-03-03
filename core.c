@@ -82,7 +82,7 @@
 			- average ports min/max (because it suddenly changes)
 		*/
 
-		int64_t now = NOW();
+		int64_t now = clock_time();
 		
 		if( p->stats_len == 0 )
 			p->t0 = now;
@@ -108,7 +108,7 @@
 			if( v > max ) max = v; }
 		p->min = min;
 		p->max = max;
-		now = NOW();
+		now = clock_time();
 
 		if( ports[0].stage < 1 || ports[1].stage < 1 )
 			return;
@@ -127,7 +127,7 @@
 			sum += lstat[si%ssize].avail;
 			len += 1; }
 		L = (float)sum / (float)len;
-		now = NOW();
+		now = clock_time();
 
 		if( cursor < 0 ){
 			
@@ -135,7 +135,7 @@
 			cursor = now -ports[0].t0 +ports[0].min -(int)(L*0.66); //-(ports[1].max -ports[1].min)*2;
 			dith_t = now;
 			if( cursor >= 0 ){
-				PRINT("%s init %d \r\n", clock_timestr(), cursor ); }
+				print("%s init %d \r\n", clock_timestr(), cursor ); }
 		}
 
 		else {
@@ -150,7 +150,7 @@
 				sum += gstat[si%ssize].avail;
 				len += 1; }
 			G = (float)sum / (float)len;
-			now = NOW();
+			now = clock_time();
 
 			// dith
 			dith_sig = (L-G) / 10.0;  // G to L for 1 second (speed)
@@ -162,13 +162,13 @@
 					cursor += 1;
 					// todo: remove 1 from all stats so dith sig is lower next ime
 					if( print_modified_samples )
-						PRINT("%s skipped 1 sample %d \r\n", clock_timestr(), cursor ); 
+						print("%s skipped 1 sample %d \r\n", clock_timestr(), cursor ); 
 					}
 				else {
 					cursor -= 1;
 					// todo: add 1 to all stats so dith sig is bigger next ime
 					if( print_modified_samples )
-						PRINT("%s replayed 1 sample %d \r\n", clock_timestr(), cursor );
+						print("%s replayed 1 sample %d \r\n", clock_timestr(), cursor );
 					}
 				dith_t = now;
 			}
@@ -196,11 +196,11 @@
 		struct convolve_task T;
 
 		if( statusFlags ){
-			if( paInputUnderflow & statusFlags ) PRINT( "Input Underflow \n" );
-			if( paInputOverflow & statusFlags ) PRINT( "Input Overflow \n" );
-			if( paOutputUnderflow & statusFlags ) PRINT( "Output Underflow \n" );
-			if( paOutputOverflow & statusFlags ) PRINT( "Output Overflow \n" );
-			if( paPrimingOutput & statusFlags ) PRINT( "Priming Output \n" );}
+			if( paInputUnderflow & statusFlags ) print( "Input Underflow \n" );
+			if( paInputOverflow & statusFlags ) print( "Input Overflow \n" );
+			if( paOutputUnderflow & statusFlags ) print( "Output Underflow \n" );
+			if( paOutputOverflow & statusFlags ) print( "Output Overflow \n" );
+			if( paPrimingOutput & statusFlags ) print( "Priming Output \n" );}
 
 		if( input ){
 			
@@ -220,8 +220,8 @@
 			_makestat( ports+1 );
 
 			if( cursor > 0 ){
-				if( cursor + frameCount > ports[0].len ) PRINT( "GLITCH %d \r\n", cursor -ports[0].len );
-				if( cursor < ports[0].len -msize ) PRINT( "GLITCH %d \r\n", ports[0].len -msize -cursor ); }
+				if( cursor + frameCount > ports[0].len ) print( "GLITCH %d \r\n", cursor -ports[0].len );
+				if( cursor < ports[0].len -msize ) print( "GLITCH %d \r\n", ports[0].len -msize -cursor ); }
 
 			// write
 			int jlen = frameCount / jobs_per_channel;
@@ -263,8 +263,8 @@
 
 
 	int init(){
-		if( Pa_Initialize() ) PRINT( "ERROR: Could not initialize PortAudio. \n" );
-		if( Pa_GetDeviceCount() <= 0 ) PRINT( "ERROR: No Devices Found. \n" );        
+		if( Pa_Initialize() ) print( "ERROR: Could not initialize PortAudio. \n" );
+		if( Pa_GetDeviceCount() <= 0 ) print( "ERROR: No Devices Found. \n" );        
 		samplerate = msize = ssize = canvas = ports = map = gstat = gstat_len = jobs_per_channel = 0;
 		cursor = -1;
 		print_modified_samples = 0; }
@@ -277,20 +277,20 @@
 		samplerate = sr;
 		msize = sr * 3;
 		ssize = sr * 2;
-		canvas = MEM( sizeof(float) * msize * 4 * in );  // 4th is just because the third memcopy may be out
-		ports = MEM( sizeof(struct port) * 2 );
-		map = MEM( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) map[i].src = -1;
-		lstat = MEM( sizeof(struct stat) * ssize ); lstat_len = 0;		
-		gstat = MEM( sizeof(struct stat) * ssize ); gstat_len = 0;		
+		canvas = mem( sizeof(float) * msize * 4 * in );  // 4th is just because the third memcopy may be out
+		ports = mem( sizeof(struct port) * 2 );
+		map = mem( sizeof(struct out) * on ); for( int i=0; i<on; i++ ) map[i].src = -1;
+		lstat = mem( sizeof(struct stat) * ssize ); lstat_len = 0;		
+		gstat = mem( sizeof(struct stat) * ssize ); gstat_len = 0;		
 		ports[0].channels_count = in;
-		ports[0].stats = MEM( sizeof(struct stat) * ssize );
+		ports[0].stats = mem( sizeof(struct stat) * ssize );
 		ports[1].type = 1;
 		ports[1].channels_count = on;
-		ports[1].stats = MEM( sizeof(struct stat) * ssize );
+		ports[1].stats = mem( sizeof(struct stat) * ssize );
 		clock_init( sr );
 		threads_init( tc ); jobs_per_channel = (int)ceil( ((float)tc)/((float)on) );		
 		for( int i=0; i<2; i++ ){						
-			PRINT( "starting %s ... ", ( i==0 ? "input" : "output" ) );
+			print( "starting %s ... ", ( i==0 ? "input" : "output" ) );
  
 			int device_id = ( i==0 ? sd : dd );
 			const PaDeviceInfo *device_info = Pa_GetDeviceInfo( device_id );
@@ -315,19 +315,19 @@
 
 			if( err != paNoError ){
 				if( err != paUnanticipatedHostError ) {
-					PRINT( "ERROR 1: %s \n", Pa_GetErrorText( err ) );
+					print( "ERROR 1: %s \n", Pa_GetErrorText( err ) );
 					return 0; }
 				else {
 					const PaHostErrorInfo* herr = Pa_GetLastHostErrorInfo();
-					PRINT( "ERROR 2: %s \n", herr->errorText );
+					print( "ERROR 2: %s \n", herr->errorText );
 					return 0; }}
 
 			err = Pa_StartStream( *stream );
 			if( err != paNoError ){
-				PRINT( "ERROR 3: %s \n", Pa_GetErrorText( err ) );
+				print( "ERROR 3: %s \n", Pa_GetErrorText( err ) );
 				return 0; }
 
-			PRINT( "ok \r\n" );
+			print( "ok \r\n" );
 
 			}
 

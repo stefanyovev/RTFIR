@@ -72,6 +72,8 @@
 			console_len = HEIGHT-1;  // content-length; without the null; now full with newlines x(height-1)
 			console_lll = 0;  // lastlinelen
 			console_changed = 1;
+
+			initialized = 1;
 		}
 		
 		int inlen;
