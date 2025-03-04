@@ -1,9 +1,8 @@
 
 
 
-	// y[n] = x[n]*h[0] + x[n-1]*h[1] + x[n-2]*h[2]
-	// reverse(h); cursor -= len(h)-1
-	// y[n] = x[n]*h[0] + x[n+1]*h[1]
+	// y[n] = x[n]*h[0] + x[n-1]*h[1] + x[n-2]*h[2] + ...
+
 
 	#if __INCLUDE_LEVEL__ == 0
 		#include <stdio.h>
@@ -14,6 +13,7 @@
 			print( "error: %s", msg );
 			exit(1); }		
 		#include "mem.c"
+		#include "clock.c"
 	#endif
 
 
@@ -93,154 +93,111 @@
 	#undef VECTOR_LENGTH
 
 
+	// -------------------------------------------------------------------------------------------------------------- //
+
+
+	int convolve_test(){
+
+		#define LENGTH 50000
+
+		// sig = random192
+		float *sig = mem( sizeof(float) * (LENGTH +LENGTH-1) ); sig += LENGTH-1; // allow convolve() to read kernel_length-1 samples backwards
+		for( int i=0; i<LENGTH; i++ )
+			sig[i] = rand() % 10;
+		
+		// h1 = {1.0}
+		float *h1 = mem( sizeof(float) * 1 );
+		h1[0] = 1.0;
+		
+		// h2 = random192
+		float *h2 = mem( sizeof(float) * LENGTH );
+		for( int i=0; i<LENGTH; i++ )
+			h2[i] = rand() % 10;
+		
+		// y1, y2
+		float *y1 = mem( sizeof(float) * LENGTH );
+		float *y2 = mem( sizeof(float) * LENGTH );
+
+		// load kernels
+		struct convolve_kernel
+			*k1 = convolve_kernel_new( "h1", h1, 1 ),
+			*k2 = convolve_kernel_new( "h2", h2, LENGTH );
+
+		// task T
+		struct convolve_task T;
+
+		// Test0
+		//print( "Test 0: convolve_naive() with {1} is the same as memcopy: " );
+		T.k = k1;
+		T.in = sig;
+		T.out = y1;
+		T.len = LENGTH;
+		convolve_naive( &T );
+		for( int i=0; i<LENGTH; i++ )
+			if( y1[i] != sig[i] ){
+				print( " FAIL \r\n" );
+				print( " convolve_naive with {1} does not produce the same as memcopy" );
+				return 0; }
+		//print( " PASS \r\n" );
+
+		// Test1
+		print( "Test 1: convolve() with {1} is the same as memcopy: " );
+		T.k = k1;
+		T.in = sig;
+		T.out = y1;
+		T.len = LENGTH;
+		convolve( &T );
+		for( int i=0; i<LENGTH; i++ )
+			if( y1[i] != sig[i] ){
+				print( "  FAIL \r\n" );
+				return 0; }
+		print( "  PASS \r\n" );
+
+		// Test3
+		print( "Test 2: convolve() produces the same as convolve_naive(): " );
+		clock_init(1000); uint64_t t1, t2, t3;
+		T.k = k2;
+		T.in = sig;
+		T.out = y1;
+		T.len = LENGTH;
+		t1 = clock_time();
+		convolve_naive( &T );
+		T.out = y2;
+		t2 = clock_time();
+		convolve( &T );
+		t3 = clock_time();
+		for( int i=0; i<LENGTH; i++ )
+			if( y1[i] != y2[i] ){
+				print( " FAIL \r\n" );
+				return 0; }
+		print( " PASS \r\n" );
+		
+		print( "SPEED: \r\n" );
+		print( "  %d times faster than convolve_naive() \r\n", (t2-t1)/(t3-t2) );
+		float macs = ((float)LENGTH * (float)LENGTH) / ((float)(t3-t2) / 1000.0);
+		//print( "  %.1f multiply-add operations per second on 1 core \r\n", macs );
+		float gflops = (2.0*(float)macs) / 1000000000.0;
+		print( "  %.1f gigaflops per core \r\n", gflops );
+		float gflops_mini = (50000.0 * 50000.0 * 2.0) / 1000000000.0;
+		print( "  ~%.1f channels per core @ 192k with 1 second long filters \r\n", (gflops / gflops_mini) );
+		print( "  ~%.1f channels per core @ 96k with 1 second long filters \r\n", (gflops / gflops_mini) *4 );
+		print( "  ~%.1f channels per core @ 48k with 1 second long filters \r\n", (gflops / gflops_mini) *16 );
+		
+		#undef LENGTH
+		
+		// TODO: Test3: chunked convolve is the same as convolve
+		
+		return 1;
+	}
+
+
 
 // gcc -w convolve.c -fpermissive -o cvl -march=native -O3 && ./cvl
 
 #if __INCLUDE_LEVEL__ == 0
 
-	/*
-	// -----------------------------------------------------------------------------------------------
-	// --- TEST vector read write ---
-	
 	int main( int, int ){
-		float v = 0.5;
-		__m256 m =  _mm256_broadcast_ss( &v );
-		print( "%d \r\n", sizeof( m ) / sizeof( v ) );  // 8
-		print( "%.2f \r\n", v );  // 0.5
-		print( "%.2f \r\n", *( (float*)&m ) ); // 0.5
-		print( "%.2f \r\n", *( (float*)&m +7 ) ); // 0.5
-		}
-	// -----------------------------------------------------------------------------------------------
-	*/
-	
-	/*
-	// -----------------------------------------------------------------------------------------------
-	// --- TEST convolution visually; test if splitting results the same as one block ---
-	
-	void print_floats( float* k, int len ){
-		for( int i=0; i<len; i++ ){
-			if( k[i] == 0 ) print( "." );
-			else print( "%1g", k[i] ); } }
-
-	void print_kernel( struct convolve_kernel *k ){
-		float v;
-		for( int i=0; i<k->len; i++ ){
-			v = *( (float*)(k->data+i) );
-			if( v == 0 ) print( "." );
-			else print( "%1g", v ); } }
-	
-	int main( int, int ){
-		
-		#define HLEN 32
-		#define SLEN 96
-
-		print( "\r\n   " );
-		for( int i=0; i<96; i++ ) if( !(i%10) ) print("."); else print( "%d", i%10 );
-		print( "\r\n" );		
-
-		float *h = mem( sizeof(float)*HLEN );
-		h[0] = 1;
-		h[30] = 1;
-		h[31] = 1;
-		
-		print( "h: " );
-		print_floats( h, HLEN );
-		print( "\r\n" );
-
-		struct convolve_kernel			
-			*k = convolve_kernel_new( "H", h, HLEN );
-
-		print( "k: " );
-		print_kernel( k );
-		print( "\r\n" );
-
-		float *x = mem( sizeof(float)*SLEN );
-		x[32]=1; x[33]=2; x[34]=3; x[35]=2; x[36]=1;
-		
-		print( "x: " );
-		print_floats( x, SLEN );
-		print( "\r\n" );
-
-		float *y = mem( sizeof(float)*SLEN );		
-		struct convolve_task T;
-		T.in = x + 32;
-		T.out = y + 32;
-		T.len = 64;
-		T.k = k;
-		convolve( &T );
-		
-		print( "y: " );
-		print_floats( y, SLEN );
-		print( "\r\n" );
-		
-		// --------------------------------------------------
-		memset( y, 0, sizeof(float)*SLEN );
-		struct convolve_task t1, t2; t1.k = t2.k = k;
-		t1.in = x +32;
-		t1.out = y +32;
-		t1.len = 32;
-		t2.in = x +64;
-		t2.out = y +64;
-		t2.len = 32;
-		convolve( &t1 );
-		convolve( &t2 );
-		
-		print( "y: " );
-		print_floats( y, SLEN );
-		print( "\r\n" );
-
+		return convolve_test();
 	}
-	*/
-
-	// -----------------------------------------------------------------------------------------------
-	// --- TEST if 4 blocks 'convolve' is the same as 1 block 'convolve_naive' ---
-	
-	void fill_floats( float *p, int n ){
-		for( int i=0; i<n; i++ )
-			*p = rand() % 10; }
-	
-	void compare_floats( float *a, float *b, int n ){
-		for( int i=0; i<n; i++ )
-			if( *a == *b ) print( "." );
-			else print( "X" ); }
-	
-	int main( int, int ){
-		
-		#define HLEN 32
-		#define SLEN 96
-		
-		float *h = mem( sizeof(float)*HLEN );
-		float *x = mem( sizeof(float)*SLEN );
-		float *y1 = mem( sizeof(float)*SLEN );
-		float *y2 = mem( sizeof(float)*SLEN );
-
-		fill_floats( h, SLEN );
-		fill_floats( x, SLEN );
-		
-		struct convolve_kernel
-			*k = convolve_kernel_new( "H", h, HLEN );
-
-		struct convolve_task T;
-		
-		T.k = k;
-		T.in = x + 32;
-		T.out = y1 + 32;
-		T.len = 64;
-		convolve_naive( &T );
-		T.out = y2 + 32;
-		convolve( &T );
-		compare_floats( y1, y2, SLEN );
-		
-		// ------------------------------------------
-		memset( y2, 0, sizeof(float)*SLEN );
-		for( int i=0; i<4; i++ ){
-			T.in = x + 32 + i*16;
-			T.out = y2 + 32 + i*16;
-			T.len = 16;
-			convolve( &T ); }
-		compare_floats( y1, y2, SLEN );
-		
-	}
-	// -----------------------------------------------------------------------------------------------
 
 #endif
