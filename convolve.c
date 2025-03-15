@@ -3,11 +3,12 @@
 
 	// y[n] = x[n]*h[0] + x[n-1]*h[1] + x[n-2]*h[2] + ...
 
+	#include <immintrin.h>	
+
 
 	#if __INCLUDE_LEVEL__ == 0
 		#include <stdio.h>
 		#include <stdint.h>
-		#include <immintrin.h>	
 		#define print printf		
 		void error( char *msg ){
 			print( "error: %s", msg );
@@ -32,8 +33,7 @@
 
 	struct convolve_kernel* convolve_kernel_new( char *name, float *k, int kn ){
 		struct convolve_kernel *R = mem( sizeof( struct convolve_kernel ) );
-		R->name = mem( strlen( name )+1 );
-		strcpy( R->name, name );
+		R->name = mem( strlen( name )+1 ); strcpy( R->name, name );
 		R->len = ( kn / 16 ) * 16 + 16; // filter len multiple of 16 samples
 		R->data = mem_aligned( R->len * sizeof(float) * 8, ALIGNMENT );
 		for( int i=0; i<kn; i++ )
@@ -80,12 +80,12 @@
 				int data_offset = i + k;
 				for (int l = 0; l < SSE_SIMD_LENGTH; l++){
 					for (int m = 0; m < VECTOR_LENGTH; m+=SSE_SIMD_LENGTH) {
-						data_block = _mm256_loadu_ps(in + l + data_offset + m);
-						acc0 = _mm256_fmadd_ps(kernel[k+l+m], data_block, acc0);
-						data_block = _mm256_loadu_ps(in + l + data_offset + m + AVX_SIMD_LENGTH);
-						acc1 = _mm256_fmadd_ps(kernel[k+l+m], data_block, acc1); } } }
-			_mm256_storeu_ps(out+i, acc0);
-			_mm256_storeu_ps(out+i+AVX_SIMD_LENGTH, acc1); } }
+						data_block = _mm256_loadu_ps( in + l + data_offset + m );
+						acc0 =       _mm256_fmadd_ps( kernel[k+l+m], data_block, acc0 );
+						data_block = _mm256_loadu_ps( in + l + data_offset + m + AVX_SIMD_LENGTH );
+						acc1 =       _mm256_fmadd_ps( kernel[k+l+m], data_block, acc1 ); } } }
+			_mm256_storeu_ps( out+i, acc0 );
+			_mm256_storeu_ps( out+i+AVX_SIMD_LENGTH, acc1 ); } }
 
 	#undef ALIGNMENT
 	#undef SSE_SIMD_LENGTH
