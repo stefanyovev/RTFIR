@@ -1,0 +1,3 @@
+[submodule "nappgui"]
+	path = nappgui
+	url = https://github.com/frang75/nappgui.git
