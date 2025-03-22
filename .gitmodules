@@ -1,9 +1,6 @@
-[submodule "nappgui"]
-	path = nappgui
-	url = https://github.com/frang75/nappgui.git
-[submodule "portaudio"]
-	path = portaudio
-	url = https://github.com/PortAudio/portaudio.git
 [submodule "nappgui_src"]
 	path = nappgui_src
 	url = https://github.com/frang75/nappgui_src.git
+[submodule "portaudio"]
+	path = portaudio
+	url = https://github.com/PortAudio/portaudio.git
