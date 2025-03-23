@@ -1,0 +1,12 @@
+cd nappgui_src
+cmake .
+cmake --build . --config Release -j 4
+cmake --install . --config Release --prefix ../build
+cd ..
+cd portaudio
+cmake .
+cmake --build . --config Release -j 4
+cmake --install . --config Release --prefix ../build
+cd ..
+cmake .
+cmake --build . --config Release -j 4
