@@ -20,6 +20,11 @@ struct _app_t
 
 static void i_OnButton(App *app, Event *e)
 {
+	 if( app->clicks == 0 ){
+		 textview_printf( app->text, "Pa_Inititalize ? ... ");
+		 textview_printf( app->text, " %s \n", Pa_Initialize() ? "NO" : "YES" );
+	 }
+	 
     textview_printf(app->text, "Button click (%d)\n", app->clicks);
     app->clicks += 1;
     unref(e);

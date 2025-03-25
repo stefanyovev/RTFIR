@@ -9,4 +9,4 @@ include("nappgui_src/prj/NAppCompilers.cmake")
 
 nap_config_compiler()
 nap_project_desktop_app(RTFIR src)
-nap_add_dependency(RTFIR portaudio)
+
