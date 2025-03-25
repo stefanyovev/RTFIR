@@ -2,7 +2,7 @@
 
 
 		#include "nappgui.h"
-
+		#include "portaudio.h"
 
 
 
