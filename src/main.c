@@ -1,10 +1,8 @@
 
 
 
-		#include "../build/inc/nappgui.h"
-		#include "../build/include/portaudio.h"
-		
-		#include "os.h"
+		#include "nappgui.h"
+
 
 
 
@@ -86,5 +84,5 @@ static void i_destroy(App **app)
 
 /*---------------------------------------------------------------------------*/
 
-#include "../build/inc/osapp/osmain.h"
+#include "osapp/osmain.h"
 osmain(i_create, i_destroy, "", App)
