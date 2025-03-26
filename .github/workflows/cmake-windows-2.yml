@@ -15,8 +15,11 @@ jobs:
         ref: 'port'
         submodules: recursive
 
+    - name: script
+      run: type build.txt>build.bat
+
     - name: Run
-      run: type build.txt>build.bat&build
+      run: build.bat
 
     - name: Archive
       uses: actions/upload-artifact@v4
