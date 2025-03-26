@@ -16,6 +16,7 @@ jobs:
         submodules: recursive
 
     - name: Run
+      shell: cmd
       run: build.bat
 
     - name: Archive
