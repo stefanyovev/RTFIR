@@ -21,8 +21,11 @@ struct _app_t
 static void i_OnButton(App *app, Event *e)
 {
 	 if( app->clicks == 0 ){
-		 textview_printf( app->text, "Pa_Inititalize ? ... ");
-		 textview_printf( app->text, " %s \n", Pa_Initialize() ? "NO" : "YES" );
+		 if( Pa_Initialize() ){
+			 textview_printf( app->text, "Pa_Inititalize ERROR ");
+		 }else
+			 for( int i=0; i<Pa_GetDeviceCount(); i++ )
+				textview_printf( app->text, "%s\n", Pa_GetDeviceInfo( i )->name );
 	 }
 	 
     textview_printf(app->text, "Button click (%d)\n", app->clicks);
