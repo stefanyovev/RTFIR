@@ -1,6 +1,6 @@
 
 project(RTFIR)
-#set(nappgui_Root nappgui_src)
+
 find_package(nappgui REQUIRED)
 find_package(portaudio REQUIRED)
 
