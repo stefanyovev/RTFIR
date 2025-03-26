@@ -15,9 +15,6 @@ jobs:
         ref: 'port'
         submodules: recursive
 
-    - name: script
-      run: type build.txt>build.bat
-
     - name: Run
       run: build.bat
 
